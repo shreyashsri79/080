@@ -18,10 +18,6 @@ from regimerain.config import config_sha256, load_config
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PLANNED = {
-    "static": "MODEL_SPEC section 5 (DEM, coast, geo class, zones, district weights)",
-    "label": "MODEL_SPEC section 6 (active/break, depression, synoptic labels)",
-    "features": "MODEL_SPEC section 7 (feature tables)",
-    "backtest": "MODEL_SPEC sections 9-13 (LOMO backtest)",
     "fit-final": "MODEL_SPEC section 17 (final fit)",
     "run": "MODEL_SPEC section 18 (live GFS run)",
     "serve": "TRD section 4.14 (FastAPI + web)",
@@ -38,6 +34,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--config", action="append", default=[], metavar="FILE",
                    help="YAML config; repeat to layer overrides (default: config/default.yaml)")
     p.add_argument("--data-root", default=None, help="re-root relative paths.* entries")
+    p.add_argument("--seasons", default=None, help="override config seasons, e.g. 2019-2021")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,7 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     add("static", "static layers, zones, district weights")
     add("label", "synoptic regime labels")
     p = add("features", "feature tables")
-    p.add_argument("--leads", default="1-5")
+    p.add_argument("--leads", default=None, help="default: config leads")
+    p.add_argument("--force", action="store_true")
     p = add("backtest", "leave-one-monsoon-out backtest")
     p.add_argument("--variants", default="raw,A,B,C")
     p.add_argument("--mode", choices=["fast", "full"], default=None)
@@ -114,18 +112,54 @@ def cmd_ingest(cfg: dict, args) -> int:
     return 0
 
 
+def cmd_static(cfg: dict, args) -> int:
+    from regimerain.static.basic import build_static_basic, static_path
+    from regimerain.truth import load_truth, prepare_truth
+    prepare_truth(cfg, cfg["seasons"])
+    st = build_static_basic(load_truth(cfg, cfg["seasons"]))
+    out = static_path(cfg)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    st.to_zarr(out, mode="w")
+    print(f"static ({st.attrs['mode']}): {int(st.land.sum())} land cells -> {out}")
+    return 0
+
+
+def cmd_label(cfg: dict, args) -> int:
+    from regimerain.label.build import build_labels
+    build_labels(cfg, cfg["seasons"])
+    return 0
+
+
+def cmd_features(cfg: dict, args) -> int:
+    from regimerain.features.build import build_features
+    leads = parse_range(args.leads) if args.leads else cfg["leads"]
+    build_features(cfg, cfg["seasons"], leads, force=args.force)
+    return 0
+
+
+def cmd_backtest(cfg: dict, args) -> int:
+    from regimerain.backtest import run_backtest
+    only = parse_range(args.folds) if args.folds else None
+    run_backtest(cfg, [v.strip() for v in args.variants.split(",")], only=only, force=args.force)
+    return 0
+
+
+def cmd_report(cfg: dict, args) -> int:
+    from regimerain.verify.report import build_report
+    out = build_report(cfg)
+    print((out / "summary.md").read_text(encoding="utf-8"))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = load_config(args.config, args.data_root)
     if getattr(args, "mode", None):
         cfg["mode"] = args.mode
-    handlers = {"config": cmd_config, "selftest": cmd_selftest, "ingest": cmd_ingest}
-    if args.command == "report":
-        from regimerain.folds import check_poolable
-        check_poolable(cfg["paths"]["cache"], cfg["seasons"])
-        print("All folds poolable; report writer not implemented yet -> build MODEL_SPEC section 13.",
-              file=sys.stderr)
-        return 2
+    if getattr(args, "seasons", None):
+        cfg["seasons"] = parse_range(args.seasons)
+    handlers = {"config": cmd_config, "selftest": cmd_selftest, "ingest": cmd_ingest, "static": cmd_static,
+                "label": cmd_label, "features": cmd_features, "backtest": cmd_backtest, "report": cmd_report}
     if args.command in handlers:
         return handlers[args.command](cfg, args)
     raise NotBuiltYet(args.command)

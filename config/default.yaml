@@ -41,6 +41,7 @@ static:
   flow_to_deg: 70
 
 labels:
+  climatology: imd             # imd = sources.imd_climatology years | self = the seasons themselves (pilot)
   cmz_box: [18, 28, 65, 88]
   ab_threshold_sigma: 1.0
   ab_min_run_days: 3
