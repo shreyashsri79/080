@@ -13,6 +13,7 @@ Requirements come from `../PRD.md` §8, §11, §12, §16 (NFR-1 to NFR-4), §18 
 | Date | Done |
 |---|---|
 | 29 Sep 2026 | B0 + B1. `regimerain/runs/` (`fields`, `contract`, `mock`, `derive`, `export_web`, `geo`, `places`); CLI `run --source mock [--publish NAME]`, `publish`, `contract --check/--schema`; `tests/test_runs.py` (12 tests incl. contract ↔ `types.ts` drift). The web reads v2 only; the sample run is now produced by the package (`npm run sample`). Decisions D1–D3 applied |
+| 29 Sep 2026 | B2–B5 + B7. `api/app.py` + `runs/store.py` + `serve` (B2). `runs/replay.py`, `run --source replay [--pick]` (B3). `modelset.py` (TRD 3.4 layout, sha256-verified load), `final.py` + `fit-final` (MODEL_SPEC 17), fold models saved to `cache/fold=Y/model/`, `runs/model_run.py` + `run --source hres`, parity test passes (B4). `live/gfs.py` (Herbie, parallel prefetch, retries, cache) + `live/run.py` + `run --source gfs --init today\|cached\|DATE`, `serve --live` with `POST/GET /api/runs/live` (B5). `preflight`, `import-kaggle` (B7). Runbook: `docs/RUNBOOK.md` |
 
 ## 1. Where things stood (29 Sep 2026, before B0)
 
@@ -154,8 +155,8 @@ FastAPI, read-only first, following TRD §10. It never computes a forecast or a 
 | `GET /api/runs/latest[?kind=model]` | B2 | Latest run id + manifest. Prefers `model`, then `replay`, then `mock` |
 | `GET /api/runs/{run_id}/{manifest,grid,places,qm_curves,verification}.json` | B2 | The export files. gzip, `ETag`, immutable cache (run folders never change after writing) |
 | `GET /api/reports/{backtest_id}/verification` | B3 | TRD §3.6 rows, filterable by `variant`, `lead`, `threshold`, `synoptic` |
-| `POST /api/runs/live` | B5 | `202 {run_id, status: "running"}`. `409` if a run is already in progress |
-| `GET /api/runs/{run_id}/status` | B5 | `{status: running\|done\|failed, stage, log_tail}` |
+| `POST /api/runs/live` | B5 ✅ | `202 {status: "running", stage, log_tail}`. `409` if a run is in progress, `503` unless `serve --live` |
+| `GET /api/runs/live` | B5 ✅ | `{status: idle\|running\|done\|failed, stage, run_id, error, log_tail}` (the run id is only known at the end) |
 | `GET /api/runs/{run_id}/districts?lead=` | B6 | TRD §3.8 rows, once `aggregate` exists |
 | TRD §10 per-lead PNG / GeoJSON grids | Deferred | The web draws grids client-side from `grid.json`, so nothing needs these yet. Add them only if an external consumer asks |
 
