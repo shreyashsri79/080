@@ -17,8 +17,11 @@ export function cellAt(g: Grid, lat: number, lon: number) {
   return { i, j, idx: i * g.nlon + j, lat: g.lat0 + i * g.step, lon: g.lon0 + j * g.step }
 }
 
+/** Layers drawn on the rain ramp. */
+export const isRain = (layer: FieldLayer) => layer === 'raw' || layer === 'corrected' || layer === 'corrected_global' || layer === 'truth'
+
 export function stopsFor(layer: FieldLayer): Stop[] {
-  if (layer === 'raw' || layer === 'corrected') return RAIN
+  if (isRain(layer)) return RAIN
   if (layer === 'wind850') return WIND
   return PROB
 }
@@ -105,7 +108,13 @@ export interface FieldOpts {
 }
 
 /** The data array a layer/lead is drawn from. Images and keys hang off this, never off the layer name alone. */
-export const fieldData = (g: Grid, layer: FieldLayer, lead: number): object => g.layers[layer][lead]
+export const fieldData = (g: Grid, layer: FieldLayer, lead: number): object => {
+  const planes = g.layers[layer]
+  if (!planes) throw new Error(`layer ${layer} is not in this run`)   // callers check manifest.layers first
+  return planes[lead]
+}
+/** Whether a run has this layer (absent = not built yet, never zero). */
+export const hasLayer = (g: Grid, layer: FieldLayer) => !!g.layers[layer]
 
 let nextId = 0
 const ids = new WeakMap<object, number>()
@@ -118,7 +127,9 @@ const imgCache = new WeakMap<object, Map<string, HTMLCanvasElement>>()
  * Draws one layer of one lead day to a canvas whose rows are linear in Web Mercator Y,
  * so MapLibre can place it as an image source without distortion. Clipped to land.
  */
-export function renderField(g: Grid, land: Land, layer: FieldLayer, lead: number, opts: FieldOpts = {}, scale = 8): HTMLCanvasElement {
+export function renderField(g: Grid, land: Land, layer: FieldLayer, lead: number, opts: FieldOpts = {},
+  // ~500 px across whatever the grid step: 8 per cell at 0.5 deg, 4 at 0.25 deg
+  scale = Math.max(2, Math.round(480 / g.nlon))): HTMLCanvasElement {
   const { edge = 'feather', outside } = opts
   // Keyed on the data array itself: a placeholder field kept while the next one loads is never
   // painted with another layer's colour scale.
@@ -141,7 +152,7 @@ export function renderField(g: Grid, land: Land, layer: FieldLayer, lead: number
   const arr = isRegime ? null : (data as (number | null)[])
   const reg = data as number[]
   const stops = stopsFor(layer)
-  const lowCut = layer === 'raw' || layer === 'corrected' ? 4 : layer === 'wind850' ? 1 : 0.06
+  const lowCut = isRain(layer) ? 4 : layer === 'wind850' ? 1 : 0.06
   for (let py = 0; py < H; py++) {
     const lat = invMercY(y0 - ((py + 0.5) / H) * (y0 - y1))
     const fi = (lat - g.lat0) / g.step
@@ -155,7 +166,7 @@ export function renderField(g: Grid, land: Land, layer: FieldLayer, lead: number
         if (i >= 0 && j >= 0 && i < g.nlat && j < g.nlon) {
           const r = reg[i * g.nlon + j]
           if (r >= 0) rgb = regimeRGB(r)
-          if (r === REGIME_ORDER.indexOf('other')) lowV = 0.18 // "other" is a fold bucket: keep it faint
+          if (r === REGIME_ORDER.indexOf('normal')) lowV = 0.3 // "normal" is the background state: keep it faint
         }
       } else {
         const v = bilinear(arr!, g, fi, fj)
@@ -223,6 +234,7 @@ export function makeParticles(g: Grid, lead: () => number, count = 1400, opacity
   const wind = (lat: number, lon: number): [number, number] => {
     const L = lead()
     const fi = (lat - g.lat0) / g.step, fj = (lon - g.lon0) / g.step
+    if (!g.layers.u850 || !g.layers.v850) return [0, 0]
     return [bilinear(g.layers.u850[L], g, fi, fj) ?? 0, bilinear(g.layers.v850[L], g, fi, fj) ?? 0]
   }
   return {

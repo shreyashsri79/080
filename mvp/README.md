@@ -17,7 +17,7 @@ mvp/
 ```bash
 cd mvp/web
 npm install
-npm run sample            # writes the synthetic run (once, or after editing the generator)
+npm run sample            # writes the synthetic run through regimerain's mock producer (needs numpy + pydantic)
 npm run dev               # http://localhost:5173
 ```
 
@@ -42,19 +42,18 @@ Works offline after `npm install`: fonts, MapLibre and data are all local. `?run
 
 Keyboard on the map: Shift+←/→ changes lead day, Esc closes the point panel, arrows move the compare handle.
 
-## Contract with the pipeline
+## Contract with the pipeline (web contract v2)
 
-The `regimerain` pipeline writes the same files per run into `web/public/run/<run_id>/` (later served by the API, PRD §12). Types are in `web/src/lib/types.ts`.
+Every run, mock or real, is written by one exporter in the `regimerain` package (`regimerain/runs/`, plan: `../docs/BACKEND_BUILD_PLAN.md`). The shapes are pydantic models in `regimerain/runs/contract.py`; `web/src/lib/types.ts` mirrors them and `tests/test_runs.py` fails if the two drift. `regimerain contract --check <dir>` validates a folder.
 
-- `manifest.json`: run metadata, thresholds, `depression_track`, `wettest` point. `synthetic: true` shows the banner; real runs set `false`.
-- `grid.json`: regular lat/lon grid, rows south to north. Per lead day: `raw`, `corrected`, `p_heavy`, `p_very_heavy` (null over sea), `regime` (index, −1 over sea), `u850`, `v850`, `wind850`; plus `regime_probs_pct` (6 per cell).
-- `places.json`: named places, nearest land cell, values per lead day, QM curve id and its sample count.
-- `qm_curves.json`: per-regime and global quantile curves with `n_days`.
-- `verification.json`: `entries` per fold × threshold (pooled, per season, per regime) and `reliability` bins.
+- `manifest.json`: `contract_version: 2`, `kind` (`mock` / `replay` / `model`; `synthetic` is derived from it), thresholds from config (64.5 / 115.6), `layers` actually present, `depression_track` (MSLP minimum), `wettest` point, provenance (model set, hashes, config hash, backtest id).
+- `grid.json`: 0.25° rain domain, rows south to north. Per rain day: `raw`, `corrected` (regime-aware, variant B), `corrected_global` (variant A), `p_heavy`, `p_very_heavy`, `truth` (null off land); `regime` (most probable of active / break / depression / normal); static `geo` (plains / coastal / orographic); `u850`, `v850`, `wind850`; `regime_probs_pct` (4 per cell). Any layer can be absent: absent means not built, and the UI hides it.
+- `places.json`: named places, nearest land cell, terrain class, values per rain day, the regime curve used and its training days.
+- `qm_curves.json`: per-regime (variant B) and global (variant A) quantile curves with `n_days`. Optional.
+- `verification.json`: from the backtest report: `entries` per fold × rain day × threshold (pooled, per season, per regime) with raw / corrected / global scores, FSS per window (`fss_windows`, km from the grid step), bootstrap `deltas`, `reliability`. Optional.
 
 ## Known gaps
 
 - Sample values, including every score, are invented. The banner, bulletin and footer say so.
-- The sample grid is 0.5°; the spec's working grid is 0.25°. The UI reads the step from the run.
 - District polygons wait on the boundary licence (PRD §20). Places stand in.
-- No backend yet (`POST /runs/live`).
+- Backend: mock producer and web export built (phases B0–B1). API, replay, model and live runs are next: `../docs/BACKEND_BUILD_PLAN.md`.

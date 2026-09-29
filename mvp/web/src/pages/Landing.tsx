@@ -7,16 +7,19 @@ import { Marquee } from '../components/Marquee'
 import { NumberTicker } from '../components/NumberTicker'
 import { FadeUp, RevealLines } from '../components/Reveal'
 import { MetricBars, QmChart, VerdictTag } from '../components/charts'
-import { RAIN, REGIME, REGIME_ORDER } from '../lib/color'
-import { METRIC_KEYS, METRIC_META, fmtDay, fmtLat, fmtLon, fmtMetric, verdict } from '../lib/format'
+import { GEO_ORDER, RAIN, REGIME, REGIME_ORDER } from '../lib/color'
+import { FSS_HEADLINE, METRIC_KEYS, METRIC_META, fmtDay, fmtLat, fmtLon, fmtMetric, verdict } from '../lib/format'
+import { pooledEntry, regimeEntries, score } from '../lib/verify'
 import { useRun } from '../lib/run'
-import type { FieldLayer, MetricKey, Regime } from '../lib/types'
+import type { FieldLayer, MetricKey, Regime, Threshold } from '../lib/types'
 
 /** Glass panel for text over the live map: translucent surface, blurred and saturated backdrop. */
 const glass = 'pointer-events-auto rounded-[4px] border border-ink/25 bg-paper/80 shadow-[0_2px_14px_rgba(14,26,31,0.1)] backdrop-blur-[3px] backdrop-saturate-150'
 
-const VOCAB = ['RMSE', 'ETS', 'CSI', 'POD', 'FAR', 'FSS 25 km', 'FSS 50 km', 'heavy ≥ 64.5 mm/day', 'very heavy ≥ 124.5 mm/day',
-  '0.25° grid', 'CHIRPS 2.0 · 0.05°', 'IFS HRES', 'ERA5', 'IBTrACS', 'MJO RMM', 'leave-one-monsoon-out', 'EPSG:4326', 'June–September']
+/** Real vocabulary for the marquee: metric names and thresholds come from the run. */
+const vocab = (th: Record<Threshold, number>, step: number) => [...METRIC_KEYS.map((k) => METRIC_META[k].name),
+  `heavy ≥ ${th.heavy} mm/day`, `very heavy ≥ ${th.very_heavy} mm/day`, `${step}° grid`, 'IMD gridded rainfall 0.25°', 'IFS HRES',
+  'IBTrACS', 'MJO RMM', 'leave-one-monsoon-out', 'EPSG:4326', 'June–September']
 
 export default function Landing() {
   const run = useRun()
@@ -30,7 +33,7 @@ export default function Landing() {
     return () => q.removeEventListener('change', f)
   }, [])
   const mark = useMemo(() => ({ lat: w.lat, lon: w.lon }), [w.lat, w.lon])
-  const heavy = ver?.entries.find((e) => e.fold === 'pooled' && e.threshold === 'heavy' && !e.regime)
+  const heavy = pooledEntry(ver, 'heavy')
 
   return (
     <main data-testid="landing">
@@ -60,8 +63,8 @@ export default function Landing() {
               {[
                 [<NumberTicker key="c" value={w.corrected_mm} decimals={1} duration={2.2} />, 'mm/day corrected, wettest point'],
                 [w.raw_mm.toFixed(1), 'mm/day raw forecast there'],
-                [`${Math.round(w.p_heavy * 100)}%`, `chance of heavy rain (≥ ${m.thresholds_mm.heavy} mm)`],
-                [REGIME_ORDER.length - 1, 'rain regimes, each with its own curve'],
+                w.p_heavy != null ? [`${Math.round(w.p_heavy * 100)}%`, `chance of heavy rain (≥ ${m.thresholds_mm.heavy} mm)`] : [REGIME[w.regime].label, 'regime predicted there'],
+                [`${REGIME_ORDER.length}×${GEO_ORDER.length}`, 'regimes × terrain classes, each with its own curves'],
               ].map(([v, label], i) => (
                 <div key={i} className="min-w-0">
                   <dt className="sr-only">{label}</dt>
@@ -77,7 +80,7 @@ export default function Landing() {
           <p className="eyebrow">Corrected rain · mm/day · {fmtDay(w.valid_date)}</p>
           <div className="mt-2 h-2.5 rounded-[2px] border border-ink/15" style={{ background: `linear-gradient(90deg, ${RAIN.map(([v, c]) => `${c} ${(v / 200) * 100}%`).join(',')})` }} />
           <div className="relative mt-1 h-3.5 font-mono text-[10.5px] text-ink-2">
-            {[1, 35, 64.5, 124.5, 200].map((t) => <span key={t} className="absolute -translate-x-1/2 last:-translate-x-full" style={{ left: `${(t / 200) * 100}%` }}>{t}</span>)}
+            {[1, 35, m.thresholds_mm.heavy, m.thresholds_mm.very_heavy, 200].map((t) => <span key={t} className="absolute -translate-x-1/2 last:-translate-x-full" style={{ left: `${(t / 200) * 100}%` }}>{t}</span>)}
           </div>
           <p className="mt-2 text-[12px] leading-snug text-ink-2">
             +{grid.leads[w.lead].lead_hours} h ahead. Circle marks the wettest point: {fmtLat(w.lat)} {fmtLon(w.lon)}, a{' '}
@@ -89,7 +92,7 @@ export default function Landing() {
       {/* ---------------------------------------------------------------- vocabulary strip */}
       <div className="border-y border-ink bg-ink py-3 font-mono text-[13px] tracking-wide text-paper">
         <Marquee seconds={55}>
-          {VOCAB.map((v) => <span key={v} className="flex items-center gap-10 whitespace-nowrap">{v}<span className="text-[#5d7077]">/</span></span>)}
+          {vocab(m.thresholds_mm, m.grid_step_deg).map((v) => <span key={v} className="flex items-center gap-10 whitespace-nowrap">{v}<span className="text-[#5d7077]">/</span></span>)}
         </Marquee>
       </div>
 
@@ -106,7 +109,7 @@ export default function Landing() {
           </FadeUp>
         </div>
         <ul className="mt-16 border-t border-ink">
-          {REGIME_ORDER.filter((r) => r !== 'other').map((r, i) => (
+          {REGIME_ORDER.map((r, i) => (
             <FadeUp key={r} delay={i * 0.05}>
               <li className="grid items-baseline gap-x-8 gap-y-1 border-b border-rule py-5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]">
                 <span className="flex items-baseline gap-4">
@@ -114,7 +117,7 @@ export default function Landing() {
                   <span className="display text-[length:clamp(32px,5vw,72px)]">{REGIME[r].label}</span>
                 </span>
                 <span className="text-[16px] text-ink-2">{REGIME[r].desc}</span>
-                <span className="num text-[13px] text-ink-2">{m.regime_days[r].toLocaleString()} training days</span>
+                <span className="num text-[13px] text-ink-2">{m.regime_days?.[r] != null ? `${m.regime_days[r].toLocaleString()} training days` : ''}</span>
               </li>
             </FadeUp>
           ))}
@@ -135,8 +138,9 @@ export default function Landing() {
             <p className="eyebrow">Heavy rain · pooled over held-out seasons{m.synthetic && ' · sample values'}</p>
           </div>
           <div className="mt-14 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-            {(['fss_50km', 'pod', 'ets', 'rmse'] as MetricKey[]).map((k) => {
-              const a = heavy.baseline[k], b = heavy.corrected[k]
+            {([FSS_HEADLINE, 'pod', 'ets', 'rmse'] as MetricKey[]).map((k) => {
+              const a = score(heavy.baseline, k), b = score(heavy.corrected, k)
+              if (a == null || b == null) return null
               return (
                 <FadeUp key={k}>
                   <div className="border-t-2 border-ink pt-3">
@@ -182,7 +186,7 @@ const STEPS: { layer: FieldLayer; title: string; body: string }[] = [
   { layer: 'raw', title: 'Start from the raw forecast.', body: 'Daily rainfall from an open global model, clipped to India on a 0.25° grid. This is what forecasters get today.' },
   { layer: 'regime', title: 'Name the kind of day.', body: 'A gradient-boosted classifier reads only what is known when the forecast is issued: the forecast rain, 850 hPa wind, moisture flux, MJO phase, terrain and coast. It gives a probability for each regime, per cell.' },
   { layer: 'corrected', title: 'Correct with that day’s curve.', body: 'Each regime has its own quantile-mapping curve, fitted on past days of that regime only. The tail is extrapolated, not clipped, so heavy rain keeps its size.' },
-  { layer: 'p_heavy', title: 'Say how likely heavy rain is.', body: 'A calibrated model gives the chance of reaching IMD’s heavy (64.5 mm) and very heavy (124.5 mm) thresholds.' },
+  { layer: 'p_heavy', title: 'Say how likely heavy rain is.', body: 'A calibrated model gives the chance of reaching IMD’s heavy ({heavy} mm) and very heavy ({very_heavy} mm) thresholds.' },
   { layer: 'corrected', title: 'Score it against the truth.', body: 'Every season is held out in turn. RMSE, ETS, CSI, POD, FAR and FSS are reported for raw and corrected, including where correction made things worse.' },
 ]
 
@@ -196,16 +200,19 @@ function Step({ i, onActive, children }: { i: number; onActive: (i: number) => v
 function Pipeline() {
   const run = useRun()
   const [active, setActive] = useState(0)
-  const heavy = run.verification?.entries.find((e) => e.fold === 'pooled' && e.threshold === 'heavy' && !e.regime)
+  const heavy = pooledEntry(run.verification, 'heavy')
   const lead = run.manifest.wettest.lead
+  const th = run.manifest.thresholds_mm
+  const steps = useMemo(() => STEPS.filter((st) => st.layer !== 'p_heavy' || run.manifest.layers.includes('p_heavy'))
+    .map((st) => ({ ...st, body: st.body.replace('{heavy}', String(th.heavy)).replace('{very_heavy}', String(th.very_heavy)) })), [run.manifest.layers, th])
   return (
     <section className="relative border-t border-ink" aria-label="How the pipeline works">
       <div className="grid lg:grid-cols-[1.15fr_1fr]">
         <div className="sticky top-0 h-[55vh] lg:h-svh">
-          <FieldStage run={run} layer={STEPS[active].layer} lead={lead} anchorX={0.5} particles={active !== 1} className="relative h-full w-full" />
+          <FieldStage run={run} layer={steps[active].layer} lead={lead} anchorX={0.5} particles={active !== 1} className="relative h-full w-full" />
           <div className="absolute left-4 top-4 flex flex-col gap-1">
             <span className="eyebrow"><span className="tape">Layer shown</span></span>
-            <span className="num text-[15px]"><span className="tape tape-ink">{STEPS[active].layer === 'p_heavy' ? 'P(heavy)' : STEPS[active].layer}</span></span>
+            <span className="num text-[15px]"><span className="tape tape-ink">{steps[active].layer === 'p_heavy' ? 'P(heavy)' : steps[active].layer}</span></span>
           </div>
           {active === 1 && (
             <ul className="absolute bottom-4 left-4 flex max-w-[90%] flex-wrap gap-1 text-[12.5px]">
@@ -214,19 +221,19 @@ function Pipeline() {
           )}
         </div>
         <div className="px-5 md:px-10">
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <Step key={i} i={i} onActive={setActive}>
-              <p className="num text-[13px] text-ink-2">Step {i + 1} of {STEPS.length}</p>
+              <p className="num text-[13px] text-ink-2">Step {i + 1} of {steps.length}</p>
               <h3 className="display mt-3 text-[length:clamp(34px,4.2vw,64px)]">{s.title}</h3>
               <p className="mt-5 max-w-[44ch] text-[17px] leading-[1.6] text-ink-2">{s.body}</p>
-              {i === 2 && (
+              {s.title.startsWith('Correct') && (
                 <div className="mt-8 max-w-[480px] rounded-[4px] border border-rule bg-surface p-4">
                   <QmChart curves={run.curves} show={['global', 'depression', 'break']} height={260} />
                 </div>
               )}
-              {i === 4 && heavy && (
+              {s.title.startsWith('Score') && heavy && (
                 <div className="mt-8 max-w-[520px] rounded-[4px] border border-rule bg-surface p-4">
-                  <MetricBars entry={heavy} keys={['rmse', 'pod', 'far', 'fss_50km']} />
+                  <MetricBars entry={heavy} keys={['rmse', 'pod', 'far', FSS_HEADLINE]} />
                 </div>
               )}
             </Step>
@@ -241,11 +248,13 @@ function Pipeline() {
 
 function WhereItDidNotHelp() {
   const { verification: ver, manifest } = useRun()
-  const worse = ver!.entries
-    .filter((e) => e.fold === 'pooled' && e.regime)
-    .flatMap((e) => METRIC_KEYS.filter((k) => verdict(k, e.baseline[k], e.corrected[k]) === 'worse').map((k) => ({ e, k, rel: Math.abs(e.corrected[k] - e.baseline[k]) / Math.max(1e-6, Math.abs(e.baseline[k])) })))
+  const worse = regimeEntries(ver!)
+    .flatMap((e) => METRIC_KEYS.filter((k) => verdict(k, score(e.baseline, k), score(e.corrected, k)) === 'worse').map((k) => {
+      const a = score(e.baseline, k)!, b = score(e.corrected, k)!
+      return { e, k, a, b, rel: Math.abs(b - a) / Math.max(1e-6, Math.abs(a)) }
+    }))
     .sort((a, b) => b.rel - a.rel)
-  const total = ver!.entries.filter((e) => e.fold === 'pooled' && e.regime).length * METRIC_KEYS.length
+  const total = regimeEntries(ver!).length * METRIC_KEYS.length
   if (!worse.length) return null
   const top = worse[0]
   const reg = top.e.regime as Regime
@@ -258,7 +267,7 @@ function WhereItDidNotHelp() {
         </h2>
         <FadeUp>
           <div className="num text-[length:clamp(48px,6vw,96px)] font-medium leading-none tracking-[-0.04em] text-worse">
-            {fmtMetric(top.k, top.e.baseline[top.k])} → {fmtMetric(top.k, top.e.corrected[top.k])}
+            {fmtMetric(top.k, top.a)} → {fmtMetric(top.k, top.b)}
           </div>
           <p className="mt-4 max-w-[46ch] text-[16px] text-ink-2">
             {worse.length} of {total} regime-and-metric results got worse after correction. They stay on the scorecard in red, not in a footnote.

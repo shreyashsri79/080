@@ -1,7 +1,8 @@
 import { motion, useInView, useReducedMotion } from 'motion/react'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { REGIME, REGIME_ORDER } from '../lib/color'
+import { REGIME, REGIME_ORDER, THRESHOLDS } from '../lib/color'
 import { METRIC_KEYS, METRIC_META, fmtMetric, verdict } from '../lib/format'
+import { pooledEntry, score, seasonEntries } from '../lib/verify'
 import type { MetricKey, QmCurve, Regime, Threshold, Verification, VerificationEntry } from '../lib/types'
 
 const INK2 = '#46565c'
@@ -114,11 +115,12 @@ export function MetricBars({ entry, keys = METRIC_KEYS, big = false }: { entry: 
   return (
     <div ref={ref} className="grid gap-4" data-testid="metric-bars">
       {keys.map((k) => {
-        const a = entry.baseline[k], b = entry.corrected[k]
+        const a = score(entry.baseline, k), b = score(entry.corrected, k)
+        if (a == null || b == null) return null
         const max = k === 'rmse' ? niceMax(Math.max(a, b)) : 1
         const v = verdict(k, a, b)
         return (
-          <div key={k} className="grid grid-cols-[minmax(84px,120px)_1fr_auto] items-center gap-x-4 gap-y-1">
+          <div key={k} className="grid grid-cols-[minmax(84px,136px)_1fr_auto] items-center gap-x-4 gap-y-1">
             <div>
               <div className={`font-display font-extrabold tracking-tight ${big ? 'text-[22px]' : 'text-[17px]'}`}>{METRIC_META[k].name}</div>
               <div className="text-[11px] text-ink-3">{METRIC_META[k].low ? 'lower is better' : 'higher is better'}</div>
@@ -145,8 +147,8 @@ export function MetricBars({ entry, keys = METRIC_KEYS, big = false }: { entry: 
   )
 }
 
-export function VerdictTag({ v }: { v: 'better' | 'worse' | 'same' }) {
-  const m = { better: ['▲', 'Better', 'text-good'], worse: ['▼', 'Worse', 'text-worse'], same: ['■', 'No change', 'text-ink-2'] }[v]
+export function VerdictTag({ v }: { v: 'better' | 'worse' | 'same' | 'na' }) {
+  const m = { better: ['▲', 'Better', 'text-good'], worse: ['▼', 'Worse', 'text-worse'], same: ['■', 'No change', 'text-ink-2'], na: ['', 'Not defined', 'text-ink-3'] }[v]
   return <span className={`num whitespace-nowrap text-[12px] font-medium ${m[2]}`}><span aria-hidden="true">{m[0]} </span>{m[1]}</span>
 }
 
@@ -154,8 +156,8 @@ export function VerdictTag({ v }: { v: 'better' | 'worse' | 'same' }) {
 
 export function DeltaMatrix({ ver, th }: { ver: Verification; th: Threshold }) {
   const { setTip, el } = useTip()
-  const rows = REGIME_ORDER.map((r) => ver.entries.find((e) => e.fold === 'pooled' && e.threshold === th && e.regime === r)).filter(Boolean) as VerificationEntry[]
-  const colMax = useMemo(() => Object.fromEntries(METRIC_KEYS.map((k) => [k, Math.max(1e-6, ...rows.map((e) => Math.abs(e.corrected[k] - e.baseline[k])))])), [rows])
+  const rows = REGIME_ORDER.map((r) => pooledEntry(ver, th, r)).filter(Boolean) as VerificationEntry[]
+  const colMax = useMemo(() => Object.fromEntries(METRIC_KEYS.map((k) => [k, Math.max(1e-6, ...rows.map((e) => Math.abs((score(e.corrected, k) ?? 0) - (score(e.baseline, k) ?? 0))))])), [rows])
   return (
     <div className="relative overflow-x-auto" data-testid="delta-matrix">
       <table className="w-full min-w-[640px] border-separate border-spacing-[2px] text-[12.5px]">
@@ -173,7 +175,9 @@ export function DeltaMatrix({ ver, th }: { ver: Verification; th: Threshold }) {
                 {REGIME[e.regime!].label}
               </th>
               {METRIC_KEYS.map((k) => {
-                const a = e.baseline[k], b = e.corrected[k], d = b - a
+                const a = score(e.baseline, k), b = score(e.corrected, k)
+                if (a == null || b == null) return <td key={k} className="num rounded-[3px] bg-[#eef1ef] px-2 py-2 text-right text-ink-3">—</td>
+                const d = b - a
                 const v = verdict(k, a, b)
                 const s = Math.min(1, Math.abs(d) / colMax[k])
                 const bg = v === 'better' ? `rgba(11,110,127,${0.1 + 0.45 * s})` : v === 'worse' ? `rgba(192,38,61,${0.12 + 0.5 * s})` : '#eef1ef'
@@ -208,8 +212,8 @@ export function DeltaMatrix({ ver, th }: { ver: Verification; th: Threshold }) {
 
 export function SeasonDumbbells({ ver, th, metric }: { ver: Verification; th: Threshold; metric: MetricKey }) {
   const { setTip, el } = useTip()
-  const rows = ver.entries.filter((e) => e.threshold === th && !e.regime && e.fold !== 'pooled')
-  const vals = rows.flatMap((e) => [e.baseline[metric], e.corrected[metric]])
+  const rows = seasonEntries(ver, th).filter((e) => score(e.baseline, metric) != null && score(e.corrected, metric) != null)
+  const vals = rows.flatMap((e) => [score(e.baseline, metric)!, score(e.corrected, metric)!])
   const lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.15 || 0.05
   const W = 480, rowH = 30, m = { l: 52, r: 16, t: 8, b: 26 }, H = m.t + m.b + rows.length * rowH
   const x = (v: number) => m.l + ((v - (lo - pad)) / (hi - lo + 2 * pad)) * (W - m.l - m.r)
@@ -219,7 +223,7 @@ export function SeasonDumbbells({ ver, th, metric }: { ver: Verification; th: Th
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`${METRIC_META[metric].name} per held-out season, raw and corrected`}>
         {rows.map((e, i) => {
           const cy = m.t + i * rowH + rowH / 2
-          const a = e.baseline[metric], b = e.corrected[metric]
+          const a = score(e.baseline, metric)!, b = score(e.corrected, metric)!
           const v = verdict(metric, a, b)
           return (
             <g key={e.fold} onPointerEnter={() => setTip({ x: (x(b) / W) * 100 + '%', y: cy, body: <><div className="text-ink-2">Season {e.fold} held out</div><div>Raw {fmtMetric(metric, a)} → {fmtMetric(metric, b)}</div><VerdictTag v={v} /></> })}
@@ -247,7 +251,8 @@ export function ReliabilityChart({ ver }: { ver: Verification }) {
   const W = 420, H = 380, m = { l: 44, r: 14, t: 10, b: 38 }
   const x = (v: number) => m.l + v * (W - m.l - m.r)
   const y = (v: number) => H - m.b - v * (H - m.t - m.b)
-  const series: [Threshold, string, string][] = [['heavy', '#2a78d6', 'Heavy ≥ 64.5 mm'], ['very_heavy', '#eb6834', 'Very heavy ≥ 124.5 mm']]
+  const series = ([['heavy', '#2a78d6', `Heavy ≥ ${THRESHOLDS.heavy} mm`], ['very_heavy', '#eb6834', `Very heavy ≥ ${THRESHOLDS.very_heavy} mm`]] as [Threshold, string, string][])
+    .filter(([th]) => ver.reliability?.[th]?.length)
   return (
     <div className="relative">
       <div className="mb-2"><Legend items={[...series.map(([, c, l]) => ({ color: c, label: l })), { color: RULE, label: 'Perfectly calibrated', dash: true }]} /></div>
@@ -263,7 +268,7 @@ export function ReliabilityChart({ ver }: { ver: Verification }) {
         <text x={12} y={(H - m.b) / 2} textAnchor="middle" fontSize="11" fill={INK2} transform={`rotate(-90 12 ${(H - m.b) / 2})`}>Observed frequency</text>
         <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)} stroke={RULE} strokeWidth="2" strokeDasharray="4 4" />
         {series.map(([th, c]) => {
-          const pts = ver.reliability[th]
+          const pts = ver.reliability![th]!
           return (
             <g key={th}>
               <polyline points={pts.map((p) => `${x(p.p_forecast)},${y(p.p_observed)}`).join(' ')} fill="none" stroke={c} strokeWidth="2" />

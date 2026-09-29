@@ -3,11 +3,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Drop } from '../components/Chrome'
-import { PROB, RAIN, REGIME, REGIME_ORDER, WIND, type Stop } from '../lib/color'
-import { cellAt, feather, makeParticles, prefersReducedMotion } from '../lib/field'
+import { GEO, PROB, RAIN, REGIME, REGIME_ORDER, WIND, type Stop } from '../lib/color'
+import { cellAt, feather, isRain, makeParticles, prefersReducedMotion } from '../lib/field'
 import { fmtDay, fmtLat, fmtLon, fmtMm, fmtPct } from '../lib/format'
 import { useRun } from '../lib/run'
-import type { FieldLayer, Place, Regime, Run } from '../lib/types'
+import type { FieldLayer, Place, Regime, Run, Threshold } from '../lib/types'
 import { OSM_COPYRIGHT } from '../lib/osm'
 import { setBasemap, setField, setTrack, useForecastMaps } from '../map/useForecastMaps'
 
@@ -23,6 +23,10 @@ const LAYERS: { id: Layer; label: string; short: string; icon: React.ReactNode }
 ]
 const MAJOR = new Set(['Mumbai', 'Delhi', 'Kolkata', 'Chennai', 'Bengaluru', 'Hyderabad', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Bhopal', 'Nagpur', 'Patna', 'Bhubaneswar', 'Guwahati', 'Kochi', 'Srinagar', 'Raipur'])
 
+/** A layer shows only if the run has its data (manifest.layers): not-built layers are hidden, never faked. */
+const available = (layers: string[], l: Layer) =>
+  l === 'rain' || l === 'regime' ? true : l === 'heavy' ? layers.includes('p_heavy') : l === 'very_heavy' ? layers.includes('p_very_heavy') : layers.includes('wind850')
+
 const fieldOf = (l: Layer, v: Variant, side: 'A' | 'B'): FieldLayer =>
   l === 'rain' ? (v === 'raw' || (v === 'compare' && side === 'A') ? 'raw' : 'corrected')
     : l === 'regime' ? 'regime' : l === 'heavy' ? 'p_heavy' : l === 'very_heavy' ? 'p_very_heavy' : 'wind850'
@@ -34,10 +38,10 @@ function valueText(run: Run, f: FieldLayer, lead: number, lat: number, lon: numb
     const r = run.grid.layers.regime[lead][c.idx]
     return r < 0 ? null : REGIME[REGIME_ORDER[r]].label
   }
-  const v = run.grid.layers[f][lead][c.idx]
+  const v = run.grid.layers[f]?.[lead][c.idx]
   if (v == null) return null
   if (f === 'wind850') return short ? `${Math.round(v)}` : `${v.toFixed(1)} m/s`
-  if (f === 'raw' || f === 'corrected') return short ? `${Math.round(v)}` : `${v.toFixed(1)} mm/day`
+  if (isRain(f)) return short ? `${Math.round(v)}` : `${v.toFixed(1)} mm/day`
   return fmtPct(v)
 }
 
@@ -271,7 +275,7 @@ export default function Forecast() {
       {/* layer rail */}
       <aside className="absolute bottom-[132px] left-3 z-30 flex flex-col gap-1 rounded-[6px] bg-paper p-1.5 shadow-[0_1px_6px_rgba(14,26,31,0.2)] md:bottom-auto md:top-[72px]" aria-label="Layers" data-testid="layer-rail">
         <div role="radiogroup" aria-label="Map layer" className="flex flex-col gap-1">
-          {LAYERS.map((l) => (
+          {LAYERS.filter((l) => available(manifest.layers, l.id)).map((l) => (
             <button key={l.id} role="radio" aria-checked={layer === l.id} onClick={() => setLayer(l.id)} title={l.label}
               className={`group flex w-[58px] flex-col items-center gap-0.5 rounded-[4px] px-1 py-1.5 text-[10.5px] font-medium leading-tight transition-colors md:w-auto md:flex-row md:gap-2.5 md:px-2.5 md:py-2 md:text-[13px] ${layer === l.id ? 'bg-ink text-paper' : 'text-ink hover:bg-[#e3e8e6]'}`}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{l.icon}</svg>
@@ -290,7 +294,7 @@ export default function Forecast() {
 
       {/* legend */}
       <div className="absolute bottom-[92px] right-3 z-30 w-[min(360px,calc(100%-96px))] rounded-[6px] bg-paper px-3 py-2.5 shadow-[0_1px_6px_rgba(14,26,31,0.2)]" data-testid="legend">
-        <LegendBar layer={layer} variant={variant} />
+        <LegendBar layer={layer} variant={variant} th={manifest.thresholds_mm} />
       </div>
 
       {/* attribution: always visible, in the strip under the timeline */}
@@ -349,20 +353,20 @@ function Swipe({ value, onChange }: { value: number; onChange: (v: number) => vo
   )
 }
 
-function LegendBar({ layer, variant }: { layer: Layer; variant: Variant }) {
+function LegendBar({ layer, variant, th }: { layer: Layer; variant: Variant; th: Record<Threshold, number> }) {
   if (layer === 'regime')
     return (
       <div>
         <p className="mb-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-2">Most probable regime</p>
-        <ul className="grid grid-cols-3 gap-x-3 gap-y-1 text-[12px]">
+        <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] sm:grid-cols-4">
           {REGIME_ORDER.map((r) => <li key={r} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: REGIME[r].color }} />{REGIME[r].label}</li>)}
         </ul>
       </div>
     )
   const [stops, unit, ticks, title]: [Stop[], string, number[], string] =
-    layer === 'rain' ? [RAIN, 'mm/day', [1, 15, 35, 64.5, 124.5, 200], variant === 'raw' ? 'Raw forecast rain' : variant === 'compare' ? 'Rain · raw | corrected' : 'Corrected rain']
+    layer === 'rain' ? [RAIN, 'mm/day', [1, 15, 35, th.heavy, th.very_heavy, 200], variant === 'raw' ? 'Raw forecast rain' : variant === 'compare' ? 'Rain · raw | corrected' : 'Corrected rain']
       : layer === 'wind' ? [WIND, 'm/s', [0, 4, 8, 12, 16, 22], 'Wind speed at 850 hPa']
-        : [PROB, '', [0, 0.3, 0.5, 0.7, 1], layer === 'heavy' ? 'Chance of ≥ 64.5 mm/day' : 'Chance of ≥ 124.5 mm/day']
+        : [PROB, '', [0, 0.3, 0.5, 0.7, 1], `Chance of ≥ ${layer === 'heavy' ? th.heavy : th.very_heavy} mm/day`]
   const max = stops[stops.length - 1][0]
   const grad = stops.map(([v, c]) => `${c} ${(v / max) * 100}%`).join(',')
   const fmt = (v: number) => (layer === 'heavy' || layer === 'very_heavy' ? `${Math.round(v * 100)}%` : `${v}`)
@@ -373,12 +377,12 @@ function LegendBar({ layer, variant }: { layer: Layer; variant: Variant }) {
         <p className="font-mono text-[11px] text-ink-2">{unit}</p>
       </div>
       <div className="relative h-3 rounded-[2px] border border-[#c9d2cf]" style={{ background: `linear-gradient(90deg, ${grad})` }}>
-        {layer === 'rain' && [64.5, 124.5].map((t) => <span key={t} className="absolute -top-1 h-5 w-[2px] bg-ink" style={{ left: `${(t / max) * 100}%` }} />)}
+        {layer === 'rain' && [th.heavy, th.very_heavy].map((t) => <span key={t} className="absolute -top-1 h-5 w-[2px] bg-ink" style={{ left: `${(t / max) * 100}%` }} />)}
       </div>
       <div className="relative mt-1 h-4 font-mono text-[10.5px] text-ink-2">
         {ticks.map((t) => <span key={t} className="absolute -translate-x-1/2" style={{ left: `${(t / max) * 100}%` }}>{fmt(t)}</span>)}
       </div>
-      {layer === 'rain' && <p className="mt-0.5 text-[11px] text-ink-2">Marks: IMD heavy (64.5) and very heavy (124.5)</p>}
+      {layer === 'rain' && <p className="mt-0.5 text-[11px] text-ink-2">Marks: IMD heavy ({th.heavy}) and very heavy ({th.very_heavy})</p>}
     </div>
   )
 }
@@ -453,12 +457,16 @@ function PointPanel({ run, sel, lead, setLead, onClose }: { run: Run; sel: { lat
   const { grid, manifest, curves } = run
   const reduce = useReducedMotion()
   const c = cellAt(grid, sel.lat, sel.lon)!
-  const at = <K extends 'raw' | 'corrected' | 'p_heavy' | 'p_very_heavy'>(k: K, l: number) => grid.layers[k][l][c.idx] as number
+  /** Value at this cell, or null when the layer is not in this run. */
+  const at = (k: 'raw' | 'corrected' | 'p_heavy' | 'p_very_heavy', l: number) => grid.layers[k]?.[l][c.idx] ?? null
   const regIdx = grid.layers.regime[lead][c.idx]
   const regime: Regime = REGIME_ORDER[regIdx]
-  const probs = REGIME_ORDER.map((r, k) => ({ r, p: grid.regime_probs_pct[lead][c.idx * 6 + k] })).sort((a, b) => b.p - a.p)
-  const curve = curves.find((q) => q.regime === regime)
-  const series = grid.leads.map((l) => ({ l, raw: at('raw', l.index), cor: at('corrected', l.index) }))
+  const nSyn = grid.synoptic.length
+  const probs = grid.synoptic.map((r, k) => ({ r, p: grid.regime_probs_pct[lead][c.idx * nSyn + k] })).sort((a, b) => b.p - a.p)
+  const curve = curves.find((q) => q.variant === 'B' && q.regime === regime && q.geo === 'all')
+  const geo = grid.geo_classes[grid.geo[c.idx]]
+  const hasP = manifest.layers.includes('p_heavy')
+  const series = grid.leads.map((l) => ({ l, raw: at('raw', l.index) ?? 0, cor: at('corrected', l.index) ?? 0 }))
   const yMax = Math.max(140, ...series.flatMap((s) => [s.raw, s.cor])) * 1.08
   const th = manifest.thresholds_mm
 
@@ -476,7 +484,7 @@ function PointPanel({ run, sel, lead, setLead, onClose }: { run: Run; sel: { lat
 
       <div className="grid grid-cols-2 gap-px bg-rule">
         {[['Corrected', `${fmtMm(at('corrected', lead))}`, 'mm/day', true], ['Raw forecast', `${fmtMm(at('raw', lead))}`, 'mm/day', false],
-          ['P(heavy)', fmtPct(at('p_heavy', lead)), `≥ ${th.heavy} mm`, false], ['P(very heavy)', fmtPct(at('p_very_heavy', lead)), `≥ ${th.very_heavy} mm`, false]].map(([k, v, u, big]) => (
+          ...(hasP ? [['P(heavy)', fmtPct(at('p_heavy', lead)), `≥ ${th.heavy} mm`, false], ['P(very heavy)', fmtPct(at('p_very_heavy', lead)), `≥ ${th.very_heavy} mm`, false]] : [])].map(([k, v, u, big]) => (
           <div key={k as string} className="bg-paper px-4 py-3">
             <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-2">{k}</div>
             <div className={`num leading-none tracking-[-0.03em] ${big ? 'mt-1.5 text-[36px] font-medium' : 'mt-2 text-[22px]'}`}>{v}</div>
@@ -534,8 +542,9 @@ function PointPanel({ run, sel, lead, setLead, onClose }: { run: Run; sel: { lat
           {[
             ['Raw forecast', `${fmtMm(at('raw', lead))} mm/day`, manifest.forecast_source],
             ['Regime predicted', `${REGIME[regime].label} · ${probs[0].p}%`, 'forecast-time inputs only'],
-            ['Curve applied', curve?.id ?? '—', curve ? `fitted on ${curve.n_days.toLocaleString()} past days of this regime` : 'no curve for this regime'],
-            ['Corrected', `${fmtMm(at('corrected', lead))} mm/day`, `P(heavy) ${fmtPct(at('p_heavy', lead))}`],
+            ['Terrain class', geo ? GEO[geo].label : '—', 'static: from elevation and distance to the coast'],
+            ['Curves blended', curve?.id ?? '—', curve ? `regime curves weighted by probability; ${REGIME[regime].label.toLowerCase()} curve fitted on ${curve.n_days.toLocaleString()} past days` : 'no curve file in this run'],
+            ['Corrected', `${fmtMm(at('corrected', lead))} mm/day`, hasP ? `P(heavy) ${fmtPct(at('p_heavy', lead))}` : 'heavy-rain chance: not in this run'],
           ].map(([k, v, note], i, arr) => (
             <motion.li key={k} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.12 }}
               className="relative grid grid-cols-[18px_1fr] gap-3 pb-3">

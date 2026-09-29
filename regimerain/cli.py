@@ -19,8 +19,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PLANNED = {
     "fit-final": "MODEL_SPEC section 17 (final fit)",
-    "run": "MODEL_SPEC section 18 (live GFS run)",
-    "serve": "TRD section 4.14 (FastAPI + web)",
+    "run --source replay": "docs/BACKEND_BUILD_PLAN.md phase B3 (replay from the backtest cache)",
+    "run --source hres": "docs/BACKEND_BUILD_PLAN.md phase B4 (model set on an HRES init)",
+    "run --source gfs": "docs/BACKEND_BUILD_PLAN.md phase B5 / MODEL_SPEC section 18 (live GFS run)",
+    "serve": "docs/BACKEND_BUILD_PLAN.md phase B2 (FastAPI + web)",
 }
 
 
@@ -65,9 +67,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="rerun folds that already have a DONE marker")
     add("report", "pool all DONE folds -> verification report + skill gate")
     add("fit-final", "refit all models on every season")
-    p = add("run", "live run")
-    p.add_argument("--source", choices=["gfs", "hres"], default="gfs")
-    p.add_argument("--init", default="today")
+    p = add("run", "produce a run and export it for the web (runs/<run_id>/web/)")
+    p.add_argument("--source", choices=["mock", "replay", "hres", "gfs"], default="gfs")
+    p.add_argument("--init", default=None, help="init date YYYY-MM-DD (mock default 2022-07-14; gfs: today|cached)")
+    p.add_argument("--seed", type=int, default=None, help="mock only")
+    p.add_argument("--publish", default=None, metavar="NAME",
+                   help="also copy the web export to mvp/web/public/run/NAME (static hosting, `npm run dev`)")
+    p = add("publish", "copy a run's web export into the static web app")
+    p.add_argument("run_id")
+    p.add_argument("--as", dest="name", default=None, help="folder name under mvp/web/public/run (default: run_id)")
+    p = add("contract", "web contract v2: validate an export folder or write the JSON Schema")
+    p.add_argument("--check", default=None, metavar="DIR", help="folder with manifest.json, grid.json, ...")
+    p.add_argument("--schema", default=None, metavar="FILE", help="write the JSON Schema here")
     p = add("selftest", "run the test suite")
     p.add_argument("--quick", action="store_true", help="only tests marked `quick`")
     add("serve", "start the API + web app")
@@ -151,6 +162,57 @@ def cmd_report(cfg: dict, args) -> int:
     return 0
 
 
+WEB_RUNS = REPO_ROOT / "mvp" / "web" / "public" / "run"
+
+
+def _publish(web_dir: Path, name: str) -> Path:
+    import shutil
+    dest = WEB_RUNS / name
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(web_dir, dest)
+    return dest
+
+
+def cmd_run(cfg: dict, args) -> int:
+    from datetime import date
+    if args.source != "mock":
+        raise NotBuiltYet(f"run --source {args.source}")
+    from regimerain.runs.export_web import export_run
+    from regimerain.runs.mock import DEFAULT_INIT, DEFAULT_SEED, MOCK_REGIME_DAYS, mock_curves, mock_fields, mock_report
+    seed = DEFAULT_SEED if args.seed is None else args.seed
+    init = date.fromisoformat(args.init) if args.init else DEFAULT_INIT
+    fields = mock_fields(cfg, init=init, seed=seed)
+    web = export_run(fields, cfg, cfg["paths"]["runs"], report=mock_report(cfg, seed), curves=mock_curves(cfg, seed),
+                     regime_days=MOCK_REGIME_DAYS)
+    print(f"run {web.parent.name} (mock, SYNTHETIC) -> {web}")
+    if args.publish:
+        print(f"published -> {_publish(web, args.publish)}")
+    return 0
+
+
+def cmd_publish(cfg: dict, args) -> int:
+    web = Path(cfg["paths"]["runs"]) / args.run_id / "web"
+    if not (web / "manifest.json").exists():
+        print(f"no web export at {web}", file=sys.stderr)
+        return 1
+    print(f"published -> {_publish(web, args.name or args.run_id)}")
+    return 0
+
+
+def cmd_contract(cfg: dict, args) -> int:
+    from regimerain.runs.contract import check_folder, write_schema
+    if args.schema:
+        print(f"schema -> {write_schema(args.schema)}")
+    if args.check:
+        problems = check_folder(args.check)
+        for p in problems:
+            print("FAIL", p)
+        print("OK: web contract v2" if not problems else f"{len(problems)} problem(s)")
+        return 1 if problems else 0
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = load_config(args.config, args.data_root)
@@ -159,7 +221,8 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "seasons", None):
         cfg["seasons"] = parse_range(args.seasons)
     handlers = {"config": cmd_config, "selftest": cmd_selftest, "ingest": cmd_ingest, "static": cmd_static,
-                "label": cmd_label, "features": cmd_features, "backtest": cmd_backtest, "report": cmd_report}
+                "label": cmd_label, "features": cmd_features, "backtest": cmd_backtest, "report": cmd_report,
+                "run": cmd_run, "publish": cmd_publish, "contract": cmd_contract}
     if args.command in handlers:
         return handlers[args.command](cfg, args)
     raise NotBuiltYet(args.command)

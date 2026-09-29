@@ -3,7 +3,8 @@ import { Footer, Nav } from '../components/Chrome'
 import { FadeUp, RevealLines } from '../components/Reveal'
 import { DeltaMatrix, MetricBars, QmChart, ReliabilityChart, SeasonDumbbells } from '../components/charts'
 import { REGIME, REGIME_ORDER } from '../lib/color'
-import { METRIC_KEYS, METRIC_META } from '../lib/format'
+import { FSS_HEADLINE, METRIC_KEYS, METRIC_META } from '../lib/format'
+import { pooledEntry } from '../lib/verify'
 import { useRun } from '../lib/run'
 import type { MetricKey, Regime, Threshold } from '../lib/types'
 
@@ -31,15 +32,16 @@ function Block({ title, note, children }: { title: string; note: string; childre
 export default function Scorecard() {
   const { verification: ver, manifest, curves } = useRun()
   const [th, setTh] = useState<Threshold>('heavy')
-  const [metric, setMetric] = useState<MetricKey>('fss_50km')
-  const [shown, setShown] = useState<Regime[]>(['depression', 'orographic', 'break'])
-  const pooled = ver?.entries.find((e) => e.fold === 'pooled' && e.threshold === th && !e.regime)
+  const [metric, setMetric] = useState<MetricKey>(FSS_HEADLINE)
+  const [shown, setShown] = useState<Regime[]>(['depression', 'active', 'break'])
+  const pooled = pooledEntry(ver, th)
+  const lead = ver ? `rain day ${ver.headline_lead}` : ''
 
   return (
     <>
       <Nav />
       <main className="px-5 pb-24 pt-14 md:px-8" data-testid="scorecard">
-        <p className="eyebrow">Verification report · {ver?.cv ?? 'not loaded'}{manifest.synthetic && ' · sample values'}</p>
+        <p className="eyebrow">Verification report · {ver ? `${ver.cv} · ${lead}` : 'not loaded'}{manifest.synthetic && ' · sample values'}</p>
         <h1 className="display mt-4 text-[length:var(--section)]"><RevealLines lines={['The scorecard the', 'problem statement asked for.']} /></h1>
         <p className="mt-6 max-w-[62ch] text-[17px] text-ink-2">
           All six named metrics, for the raw forecast and the corrected one, with every monsoon season held out in turn. Results that got worse are shown in red and stay on the page.
@@ -79,7 +81,7 @@ export default function Scorecard() {
             </div>
 
             <div className="mt-6 grid gap-6 xl:grid-cols-2">
-              <Block title="Quantile-mapping curves" note="How each regime's curve maps a raw value to a corrected one. The dashed black line is the single global curve most tools use. Sample counts show how much history is behind each curve.">
+              {curves.length > 0 && <Block title="Quantile-mapping curves" note="How each regime's curve maps a raw value to a corrected one. The dashed black line is the single global curve most tools use. Sample counts show how much history is behind each curve.">
                 <div className="mb-3 flex flex-wrap gap-1">
                   {REGIME_ORDER.map((r) => {
                     const on = shown.includes(r)
@@ -92,10 +94,10 @@ export default function Scorecard() {
                   })}
                 </div>
                 <QmChart key={shown.join()} curves={curves} show={['global', ...shown]} />
-              </Block>
-              <Block title="Reliability of heavy-rain probability" note="When the model says 60%, does heavy rain happen about 60% of the time? Points on the dashed line are perfectly calibrated.">
+              </Block>}
+              {ver.reliability && <Block title="Reliability of heavy-rain probability" note="When the model says 60%, does heavy rain happen about 60% of the time? Points on the dashed line are perfectly calibrated.">
                 <ReliabilityChart ver={ver} />
-              </Block>
+              </Block>}
             </div>
 
             <FadeUp className="mt-6 rounded-[6px] border border-rule bg-surface p-5 md:p-6">
@@ -107,7 +109,7 @@ export default function Scorecard() {
                   ['FAR', 'false alarms / (hits + false alarms)'],
                   ['CSI', 'hits / (hits + misses + false alarms)'],
                   ['ETS', 'CSI corrected for hits expected by chance'],
-                  ['FSS', `Fractions skill score over ${manifest.fss_radii_km.join(' and ')} km neighbourhoods: rewards the right event in nearly the right place`],
+                  ['FSS', `Fractions skill score over square windows of ${ver.fss_windows.map((w) => `${w.cells}×${w.cells} cells (~${w.km} km)`).join(', ')}: rewards the right event in nearly the right place`],
                 ].map(([k, v]) => (
                   <div key={k} className="grid grid-cols-[64px_1fr] gap-3 border-t border-rule pt-2"><dt className="num font-medium">{k}</dt><dd className="m-0 text-ink-2">{v}</dd></div>
                 ))}

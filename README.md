@@ -15,6 +15,7 @@ TECHNICAL_SPEC.md         TRD — grids, data contracts, modules, CLI, API, test
 docs/PS26080_Brief.md     the original problem-statement text, verbatim
 docs/PPT_BRIEF.md         deck-ready narrative, claims, demo script, for the PPT team
 docs/SOLUTION_EXPLAINED_80.md  full idea explainer: problem → solution → every model, with flowcharts
+docs/BACKEND_BUILD_PLAN.md  run producers (mock / replay / model), web contract v2, API, live run
 docs/MODEL_SPEC.md        model build guide: every model step by step, with code, config and tests (§23 = Colab, §24 = Kaggle)
 notebooks/colab_pipeline.ipynb   Colab CPU notebook (primary): STAGE = data | backtest (resumable folds) | final
 notebooks/kaggle_pipeline.ipynb  Kaggle alternative, same stages

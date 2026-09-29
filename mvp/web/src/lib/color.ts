@@ -1,27 +1,44 @@
-import type { Regime } from './types'
+import type { GeoClass, Regime, Threshold } from './types'
 
 export type Stop = [number, string]
 
-/** Rain ramp, mm/day. 64.5 and 124.5 are IMD's heavy and very-heavy thresholds: the colour class changes there. */
+/**
+ * Rain ramp, mm/day. The colour class changes exactly at IMD's heavy and very-heavy thresholds; those two
+ * breaks are set from the run's manifest by `configureThresholds` (defaults: config 64.5 / 115.6).
+ */
 export const RAIN: Stop[] = [
   [0, '#eef0ea'], [1, '#dfeaf8'], [5, '#b7d3f6'], [15, '#86b6ef'], [35, '#3987e5'],
-  [64.5, '#1c5cab'], [124.5, '#4a3aa7'], [200, '#2a1c6e'],
+  [64.5, '#1c5cab'], [115.6, '#4a3aa7'], [200, '#2a1c6e'],
 ]
+export const THRESHOLDS: Record<Threshold, number> = { heavy: 64.5, very_heavy: 115.6 }
+/** Called once when a run loads: the ramp breaks and every threshold label follow the run. */
+export function configureThresholds(t: Record<Threshold, number>) {
+  THRESHOLDS.heavy = t.heavy
+  THRESHOLDS.very_heavy = t.very_heavy
+  RAIN[5][0] = t.heavy
+  RAIN[6][0] = t.very_heavy
+}
 export const PROB: Stop[] = [
   [0, '#f6efe8'], [0.1, '#fde4d6'], [0.3, '#f9c0a2'], [0.5, '#f39866'], [0.7, '#eb6834'], [0.85, '#c24f1f'], [1, '#8f3712'],
 ]
 export const WIND: Stop[] = [[0, '#eef0ea'], [4, '#d5e7df'], [8, '#9fd1bd'], [12, '#4fb08c'], [16, '#1b8a67'], [22, '#0d5a43']]
 
-/** Validated with the dataviz palette validator (adjacent pairs pass; labels always accompany colour). */
+/** Synoptic regimes (MODEL_SPEC section 6). Labels always accompany colour. */
 export const REGIME: Record<Regime, { color: string; label: string; desc: string }> = {
   active: { color: '#1baf7a', label: 'Active', desc: 'Above-normal rain over the core monsoon zone' },
   break: { color: '#eda100', label: 'Break', desc: 'Rain dries up over the core monsoon zone' },
-  depression: { color: '#e34948', label: 'Depression', desc: 'Low-pressure system, concentrated heavy rain' },
-  coastal: { color: '#2a78d6', label: 'Coastal', desc: 'Near-coast convection, its own error pattern' },
-  orographic: { color: '#4a3aa7', label: 'Orographic', desc: 'Terrain-forced rain: Ghats, Himalayan foothills' },
-  other: { color: '#9aa5a6', label: 'Other', desc: 'No specific regime flagged' },
+  depression: { color: '#e34948', label: 'Depression', desc: 'Within 500 km of a monsoon low or depression' },
+  normal: { color: '#9aa5a6', label: 'Normal', desc: 'The monsoon near its usual state' },
 }
-export const REGIME_ORDER: Regime[] = ['active', 'break', 'depression', 'coastal', 'orographic', 'other']
+export const REGIME_ORDER: Regime[] = ['active', 'break', 'depression', 'normal']
+
+/** Static geographic class of a cell (MODEL_SPEC section 5): the correction curves are split by it too. */
+export const GEO: Record<GeoClass, { color: string; label: string; desc: string }> = {
+  plains: { color: '#c9c1a8', label: 'Plains', desc: 'Neither steep terrain nor near the coast' },
+  coastal: { color: '#2a78d6', label: 'Coastal', desc: 'Within 50 km of the sea' },
+  orographic: { color: '#4a3aa7', label: 'Orographic', desc: 'Steep, windward terrain: Ghats, Himalayan foothills, north-east hills' },
+}
+export const GEO_ORDER: GeoClass[] = ['plains', 'coastal', 'orographic']
 
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
 const cache = new Map<Stop[], number[][]>()

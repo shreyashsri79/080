@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Nav } from '../components/Chrome'
-import { REGIME } from '../lib/color'
+import { GEO, REGIME } from '../lib/color'
 import { fmtDay, fmtMm, fmtPct } from '../lib/format'
 import { useRun } from '../lib/run'
 
 export default function Bulletin() {
   const { places, grid, manifest } = useRun()
   const [lead, setLead] = useState(0)
-  const rows = useMemo(() => [...places].sort((a, b) => b.leads[lead].p_heavy - a.leads[lead].p_heavy), [places, lead])
+  const probs = manifest.layers.includes('p_heavy')
+  // most likely heavy rain first; without the exceedance model, wettest corrected value first
+  const rows = useMemo(() => [...places].sort((a, b) => probs
+    ? (b.leads[lead].p_heavy ?? 0) - (a.leads[lead].p_heavy ?? 0)
+    : b.leads[lead].corrected_mm - a.leads[lead].corrected_mm), [places, lead, probs])
   const th = manifest.thresholds_mm
   return (
     <>
@@ -42,8 +46,8 @@ export default function Bulletin() {
           <table className="mt-6 w-full text-[13.5px]">
             <thead>
               <tr className="border-b border-ink text-left">
-                {['Place', 'Regime', 'Raw mm', 'Corrected mm', `P ≥ ${th.heavy}`, `P ≥ ${th.very_heavy}`].map((h, i) => (
-                  <th key={h} className={`py-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-2 ${i > 1 ? 'text-right' : ''}`}>{h}</th>
+                {['Place', 'Regime', 'Terrain', 'Raw mm', 'Corrected mm', ...(probs ? [`P ≥ ${th.heavy}`, `P ≥ ${th.very_heavy}`] : [])].map((h, i) => (
+                  <th key={h} className={`py-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-ink-2 ${i > 2 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -54,10 +58,11 @@ export default function Bulletin() {
                   <tr key={p.name} className="border-b border-rule">
                     <td className="py-1.5 font-medium">{p.name}</td>
                     <td className="py-1.5"><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-[2px] align-[-1px]" style={{ background: REGIME[l.regime].color }} />{REGIME[l.regime].label}</td>
+                    <td className="py-1.5 text-ink-2">{GEO[p.geo].label}</td>
                     <td className="num py-1.5 text-right text-ink-2">{fmtMm(l.raw_mm)}</td>
                     <td className={`num py-1.5 text-right ${l.corrected_mm >= th.heavy ? 'font-semibold' : ''}`}>{fmtMm(l.corrected_mm)}</td>
-                    <td className="num py-1.5 text-right">{fmtPct(l.p_heavy)}</td>
-                    <td className="num py-1.5 text-right">{fmtPct(l.p_very_heavy)}</td>
+                    {probs && <td className="num py-1.5 text-right">{fmtPct(l.p_heavy)}</td>}
+                    {probs && <td className="num py-1.5 text-right">{fmtPct(l.p_very_heavy)}</td>}
                   </tr>
                 )
               })}
@@ -67,7 +72,7 @@ export default function Bulletin() {
           <section className="mt-8 grid gap-6 border-t-2 border-ink pt-5 md:grid-cols-2">
             <div>
               <h2 className="font-display text-[20px] font-extrabold tracking-tight">How to read this</h2>
-              <p className="mt-2 text-[13.5px] text-ink-2">Values are for the {manifest.grid_step_deg}° grid cell containing each place, in mm per UTC day. Probabilities are calibrated chances of reaching IMD’s heavy ({th.heavy} mm) and very heavy ({th.very_heavy} mm) thresholds.</p>
+              <p className="mt-2 text-[13.5px] text-ink-2">Values are for the {manifest.grid_step_deg}° grid cell containing each place, in mm per IMD rain day (08:30 to 08:30 IST). {probs ? <>Probabilities are calibrated chances of reaching IMD’s heavy ({th.heavy} mm) and very heavy ({th.very_heavy} mm) thresholds.</> : <>Heavy-rain probabilities are not in this run yet.</>}</p>
             </div>
             <div>
               <h2 className="font-display text-[20px] font-extrabold tracking-tight">What this cannot establish</h2>

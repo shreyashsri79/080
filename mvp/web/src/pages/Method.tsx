@@ -2,21 +2,21 @@ import { Footer, Nav } from '../components/Chrome'
 import { FadeUp, RevealLines } from '../components/Reveal'
 import { useRun } from '../lib/run'
 
+// Sources and access state as recorded in docs/PHASE0_FINDINGS.md; models as in docs/MODEL_SPEC.md section 1.
 const DATA = [
-  ['IFS HRES forecast', 'WeatherBench2, public zarr', 'Raw forecast being corrected, 0.25°, 2016–2022', 'Reachable'],
-  ['ERA5 reanalysis', 'WeatherBench2, public zarr', 'Wind and moisture fields for regime features', 'Reachable'],
-  ['CHIRPS 2.0', 'Climate Hazards Center, HTTPS', 'Rainfall truth, daily, 0.05° (~5 km)', 'Reachable'],
-  ['IBTrACS', 'NOAA NCEI', 'Depression tracks, North Indian Ocean', 'Reachable'],
-  ['MJO RMM index', 'BoM / NOAA', 'Daily MJO phase and amplitude', 'Reachable'],
-  ['NOAA GFS', 'AWS Open Data', 'Today’s forecast for live runs', 'Reachable'],
-  ['IMD gridded rainfall', 'IMD', 'Better truth for India, if it can be downloaded', 'Unconfirmed'],
+  ['IFS HRES forecast', 'WeatherBench2, public zarr', 'Raw forecast being corrected, 0.25°, 00 UTC inits, 2016–2022', 'Confirmed'],
+  ['IMD gridded rainfall', 'IMD, via imdlib', 'Truth: 0.25° rain days, 08:30 to 08:30 IST', 'Check pending'],
+  ['IBTrACS', 'NOAA NCEI', 'Depression tracks, North Indian Ocean', 'Confirmed'],
+  ['MJO RMM index', 'Bureau of Meteorology', 'Daily MJO phase and amplitude', 'Manual download'],
+  ['NOAA GFS', 'AWS Open Data', 'Today’s forecast for live runs', 'Confirmed'],
+  ['CHIRPS 2.0', 'Climate Hazards Center', 'Fallback truth if IMD is unavailable', 'Fallback'],
   ['District boundaries', 'GADM / Survey of India', 'District table and map', 'Licence open'],
 ]
 
 const MODELS = [
-  ['Regime classifier', 'Multi-class LightGBM', 'Forecast rain, 850 hPa wind, moisture flux, MJO phase, terrain and coast masks, day of year', 'Probability per regime, per cell'],
-  ['Per-regime correction', 'Empirical quantile mapping', 'One curve per regime per season, top-decile tail extrapolation', 'Corrected rainfall grid'],
-  ['Exceedance model', 'Two LightGBM classifiers + isotonic calibration', 'Raw and corrected rain, regime probabilities, masks', 'P(heavy), P(very heavy)'],
+  ['Synoptic regime classifier', 'LightGBM, 4 classes, temperature scaling, spatial smoothing', 'Forecast rain, 850 hPa wind, moisture flux, MSLP, MJO phase, terrain and coast, day of year', 'P(active, break, depression, normal) per cell'],
+  ['Regime-aware correction', 'Quantile-mapping experts with a GPD tail and shrinkage', 'One curve per regime × terrain class × zone × lead, blended by regime probability', 'Corrected rainfall grid'],
+  ['Exceedance model', 'Two LightGBM classifiers + isotonic calibration', 'Features, corrected rain, regime probabilities', 'P(heavy), P(very heavy)'],
 ]
 
 export default function Method() {
@@ -77,7 +77,7 @@ export default function Method() {
                     <td className="px-4 py-3 font-medium">{d}</td>
                     <td className="px-4 py-3 text-ink-2">{s}</td>
                     <td className="px-4 py-3 text-ink-2">{u}</td>
-                    <td className="px-4 py-3"><span className={`num text-[12.5px] ${a === 'Reachable' ? 'text-good' : 'text-warn'}`}>{a === 'Reachable' ? '● ' : '○ '}{a}</span></td>
+                    <td className="px-4 py-3"><span className={`num text-[12.5px] ${a === 'Confirmed' ? 'text-good' : 'text-warn'}`}>{a === 'Confirmed' ? '● ' : '○ '}{a}</span></td>
                   </tr>
                 ))}
               </tbody>
