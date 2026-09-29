@@ -60,4 +60,6 @@ export interface QmCurve {
 export interface Run {
   manifest: Manifest; grid: Grid; places: Place[]; verification: Verification | null
   curves: QmCurve[]; land: GeoJSON.FeatureCollection
+  /** Survey of India outline, drawn over any basemap. */
+  india: GeoJSON.FeatureCollection
 }

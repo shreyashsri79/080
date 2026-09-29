@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Drop } from '../components/Chrome'
 import { PROB, RAIN, REGIME, REGIME_ORDER, WIND, type Stop } from '../lib/color'
-import { cellAt, makeParticles, prefersReducedMotion } from '../lib/field'
+import { cellAt, feather, makeParticles, prefersReducedMotion } from '../lib/field'
 import { fmtDay, fmtLat, fmtLon, fmtMm, fmtPct } from '../lib/format'
 import { useRun } from '../lib/run'
 import type { FieldLayer, Place, Regime, Run } from '../lib/types'
-import { setField, setTrack, useForecastMaps } from '../map/useForecastMaps'
+import { OSM_COPYRIGHT } from '../lib/osm'
+import { setBasemap, setField, setTrack, useForecastMaps } from '../map/useForecastMaps'
 
 type Layer = 'rain' | 'regime' | 'heavy' | 'very_heavy' | 'wind'
 type Variant = 'raw' | 'corrected' | 'compare'
@@ -51,6 +52,7 @@ export default function Forecast() {
   const [particlesOn, setParticlesOn] = useState(!prefersReducedMotion())
   const [placesOn, setPlacesOn] = useState(true)
   const [trackOn, setTrackOn] = useState(true)
+  const [basemap, setBasemapOn] = useState(true)
   const [sel, setSel] = useState<{ lat: number; lon: number; place?: Place } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number; text: string; side: 'A' | 'B' } | null>(null)
   const [swipe, setSwipe] = useState(0.5)
@@ -59,7 +61,11 @@ export default function Forecast() {
   const aEl = useRef<HTMLDivElement>(null)
   const bEl = useRef<HTMLDivElement>(null)
   const pCanvas = useRef<HTMLCanvasElement>(null)
-  const { maps, ready } = useForecastMaps(run, aEl, bEl, 'corrected', 0)
+  const { maps, ready, osm } = useForecastMaps(run, aEl, bEl, 'corrected', 0, true)
+  /** Street-map tiles actually showing: switched on and not failed. Otherwise the plain ground comes back. */
+  const tiles = basemap && osm !== 'failed'
+  const tilesRef = useRef(tiles)
+  tilesRef.current = tiles
   const compare = layer === 'rain' && variant === 'compare'
   const leadRef = useRef(lead)
   leadRef.current = lead
@@ -68,11 +74,17 @@ export default function Forecast() {
   useEffect(() => {
     if (!ready) return
     const { A, B } = maps.current
-    setField(A!, run, fieldOf(layer, variant, 'A'), lead)
-    setField(B!, run, fieldOf(layer, variant, 'B'), lead)
+    setField(A!, run, fieldOf(layer, variant, 'A'), lead, tiles)
+    setField(B!, run, fieldOf(layer, variant, 'B'), lead, tiles)
     setTrack(A!, lead, trackOn)
     setTrack(B!, lead, trackOn)
-  }, [ready, layer, variant, lead, trackOn, run, maps])
+  }, [ready, layer, variant, lead, trackOn, run, maps, tiles])
+
+  useEffect(() => {
+    if (!ready) return
+    setBasemap(maps.current.A!, basemap, tiles)
+    setBasemap(maps.current.B!, basemap, tiles)
+  }, [ready, basemap, tiles, maps])
 
   useEffect(() => {
     if (!ready || !compare) return
@@ -118,25 +130,32 @@ export default function Forecast() {
     if (!ready || !particlesOn) return
     const cv = pCanvas.current!, ctx = cv.getContext('2d')!
     const A = maps.current.A!
-    const parts = makeParticles(grid, () => leadRef.current, 2600, layer === 'wind' ? 'rgba(14,26,31,0.7)' : 'rgba(14,26,31,0.5)')
+    // over the street map, particles fade out toward the data edge like the field does
+    const fade = (lon: number, lat: number) => feather(grid, lon, lat)
+    const parts = makeParticles(grid, () => leadRef.current, 2600, layer === 'wind' ? 0.7 : 0.5, () => (tilesRef.current ? fade : null))
     let raf = 0, moving = false, dpr = 1, W = 0, H = 0
     const size = () => {
       const r = stage.current!.getBoundingClientRect()
       dpr = Math.min(2, devicePixelRatio || 1)
       W = r.width; H = r.height
       cv.width = W * dpr; cv.height = H * dpr
+      parts.clearTrails()
     }
     const onMove = () => { moving = true }
-    const onEnd = () => { moving = false }
+    // trails hold screen positions, which a pan or zoom invalidates
+    const onEnd = () => { moving = false; parts.clearTrails() }
     A.on('move', onMove); A.on('moveend', onEnd)
     const ro = new ResizeObserver(size)
     ro.observe(stage.current!)
     size()
     const proj = (lon: number, lat: number): [number, number] => { const p = A.project([lon, lat]); return [p.x, p.y] }
-    const loop = () => {
+    let last = -1
+    const loop = (t: number) => {
+      const dt = last < 0 ? 1 : (t - last) / (1000 / 60)
+      last = t
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       if (moving) ctx.clearRect(0, 0, W, H)
-      else parts.step(ctx, proj, W, H)
+      else parts.step(ctx, proj, W, H, dt)
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
@@ -265,12 +284,19 @@ export default function Forecast() {
           <Toggle on={particlesOn} set={setParticlesOn} label="Wind particles" />
           <Toggle on={placesOn} set={setPlacesOn} label="Place values" />
           <Toggle on={trackOn} set={setTrackOn} label="Depression track" />
+          <Toggle on={basemap} set={setBasemapOn} label="Street map" />
         </div>
       </aside>
 
       {/* legend */}
       <div className="absolute bottom-[92px] right-3 z-30 w-[min(360px,calc(100%-96px))] rounded-[6px] bg-paper px-3 py-2.5 shadow-[0_1px_6px_rgba(14,26,31,0.2)]" data-testid="legend">
         <LegendBar layer={layer} variant={variant} />
+      </div>
+
+      {/* attribution: always visible, in the strip under the timeline */}
+      <div className="absolute bottom-0 right-3 z-40 rounded-t-[3px] bg-paper/90 px-1.5 text-[10.5px] leading-4 text-ink-2" data-testid="osm-attribution">
+        {tiles && <>© <a href={OSM_COPYRIGHT} target="_blank" rel="noreferrer" className="text-ink-2 underline hover:text-ink">OpenStreetMap</a> contributors · </>}
+        Coastline: Natural Earth
       </div>
 
       {/* timeline */}
@@ -360,7 +386,7 @@ function LegendBar({ layer, variant }: { layer: Layer; variant: Variant }) {
 function Timeline({ run, lead, setLead, playing, setPlaying }: { run: Run; lead: number; setLead: (l: number) => void; playing: boolean; setPlaying: (p: boolean) => void }) {
   const { grid, manifest } = run
   return (
-    <div className="absolute inset-x-3 bottom-3 z-30 flex h-[70px] items-stretch gap-2 rounded-[6px] bg-paper p-1.5 shadow-[0_1px_6px_rgba(14,26,31,0.2)]" data-testid="timeline">
+    <div className="absolute inset-x-3 bottom-4 z-30 flex h-[70px] items-stretch gap-2 rounded-[6px] bg-paper p-1.5 shadow-[0_1px_6px_rgba(14,26,31,0.2)]" data-testid="timeline">
       <button onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play lead days'} data-testid="play"
         className="grid w-11 shrink-0 place-items-center rounded-[4px] bg-ink text-paper hover:bg-accent sm:w-14">
         {playing

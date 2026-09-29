@@ -9,15 +9,16 @@ async function loadRun(id: string): Promise<Run> {
     if (!r.ok) throw new Error(`${url} returned HTTP ${r.status}`)
     return r.json() as Promise<T>
   }
-  const [manifest, grid, places, curves, land] = await Promise.all([
+  const [manifest, grid, places, curves, land, india] = await Promise.all([
     get<Run['manifest']>(base + 'manifest.json'),
     get<Run['grid']>(base + 'grid.json'),
     get<{ places: Run['places'] }>(base + 'places.json'),
     get<{ curves: Run['curves'] }>(base + 'qm_curves.json'),
     get<Run['land']>(`${import.meta.env.BASE_URL}geo/land.json`),
+    get<Run['india']>(`${import.meta.env.BASE_URL}geo/india.json`),
   ])
   const verification = await get<Run['verification']>(base + 'verification.json').catch(() => null)
-  return { manifest, grid, places: places.places, curves: curves.curves, land, verification }
+  return { manifest, grid, places: places.places, curves: curves.curves, land, india, verification }
 }
 
 type State = { run: Run | null; error: string | null }

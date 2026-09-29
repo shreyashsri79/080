@@ -7,10 +7,13 @@ import { Marquee } from '../components/Marquee'
 import { NumberTicker } from '../components/NumberTicker'
 import { FadeUp, RevealLines } from '../components/Reveal'
 import { MetricBars, QmChart, VerdictTag } from '../components/charts'
-import { REGIME, REGIME_ORDER } from '../lib/color'
+import { RAIN, REGIME, REGIME_ORDER } from '../lib/color'
 import { METRIC_KEYS, METRIC_META, fmtDay, fmtLat, fmtLon, fmtMetric, verdict } from '../lib/format'
 import { useRun } from '../lib/run'
 import type { FieldLayer, MetricKey, Regime } from '../lib/types'
+
+/** Glass panel for text over the live map: translucent surface, blurred and saturated backdrop. */
+const glass = 'pointer-events-auto rounded-[4px] border border-ink/25 bg-paper/80 shadow-[0_2px_14px_rgba(14,26,31,0.1)] backdrop-blur-[3px] backdrop-saturate-150'
 
 const VOCAB = ['RMSE', 'ETS', 'CSI', 'POD', 'FAR', 'FSS 25 km', 'FSS 50 km', 'heavy ≥ 64.5 mm/day', 'very heavy ≥ 124.5 mm/day',
   '0.25° grid', 'CHIRPS 2.0 · 0.05°', 'IFS HRES', 'ERA5', 'IBTrACS', 'MJO RMM', 'leave-one-monsoon-out', 'EPSG:4326', 'June–September']
@@ -33,31 +36,54 @@ export default function Landing() {
     <main data-testid="landing">
       {/* ---------------------------------------------------------------- hero: the forecast is the headline */}
       <section className="relative h-[calc(100svh_-_30px)] min-h-[640px] overflow-hidden">
-        <FieldStage run={run} layer="corrected" lead={w.lead} anchorX={wide ? 0.7 : 0.5} anchorY={wide ? 0.5 : 0.3} reveal particles mark={mark} className="absolute inset-0" />
+        {/* full-bleed street map backdrop: no wheel or drag, so the page still scrolls */}
+        <FieldStage run={run} layer="corrected" lead={w.lead} anchorX={wide ? 0.68 : 0.5} anchorY={wide ? 0.5 : 0.32} reveal particles mark={mark} basemap outsideIndia={0.2} className="absolute inset-0" />
+        {/* a light wash on the text side, so the panel reads over any tile without hiding the map */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-paper/70 via-paper/20 via-35% to-transparent to-55% lg:bg-gradient-to-r lg:from-paper/60 lg:via-paper/15 lg:via-30% lg:to-transparent lg:to-45%" aria-hidden="true" />
         <Nav over />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 grid gap-6 px-5 pb-8 md:px-8 lg:grid-cols-[1.25fr_1fr] lg:items-end">
-          <div>
-            <p className="eyebrow mb-4"><span className="tape">SIH26080 · MoES / NCMRWF · Regime-aware rainfall post-processing</span></p>
-            <h1 className="display text-[length:clamp(56px,9.5vw,172px)]">
-              <RevealLines lines={['Classify', 'first.', 'Correct', 'second.'].map((w) => <span className="tape">{w}</span>)} delay={0.3} />
+        <div className="pointer-events-none absolute inset-0 flex items-end px-4 pb-6 pt-24 md:px-8 lg:items-center lg:pb-10">
+          <div className={`${glass} w-full p-5 sm:max-w-[clamp(500px,42vw,660px)] sm:p-8`}>
+            <p className="eyebrow mb-3 sm:mb-5">SIH 2026 · SIH26080 · MoES / NCMRWF</p>
+            <h1 className="display text-[length:clamp(40px,4.4vw,76px)]">
+              <RevealLines lines={['Classify first.', 'Correct second.']} delay={0.3} />
             </h1>
-          </div>
-          <div className="lg:justify-self-end lg:text-right" data-testid="hero-telemetry">
-            <p className="eyebrow mb-2"><span className="tape">Wettest point in this run · corrected</span></p>
-            <div className="num text-[length:clamp(56px,9vw,168px)] font-medium leading-[0.9] tracking-[-0.05em]">
-              <span className="tape tape-ink"><NumberTicker value={w.corrected_mm} decimals={1} duration={2.2} /></span>
+            <p className="mt-4 hidden max-w-[48ch] text-[16px] leading-[1.6] text-ink-2 sm:block">
+              Rain forecasts go wrong in different ways on different days. RegimeRain names the kind of monsoon day first, from the forecast itself, then corrects the rain with a curve fitted on past days of that kind, and scores the result against what fell.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2 sm:mt-6 sm:gap-2.5">
+              <Link to="/forecast" data-testid="hero-cta" className="group inline-flex items-center gap-2 rounded-[3px] bg-ink px-3.5 py-2.5 text-[14px] font-medium text-paper sm:px-4 sm:text-[15px] no-underline shadow-[0_2px_10px_rgba(14,26,31,0.25)] transition-colors hover:bg-accent">
+                Open the forecast map <span aria-hidden="true" className="transition-transform duration-200 group-hover:translate-x-1">→</span>
+              </Link>
+              <Link to="/method" className="hidden items-center rounded-[3px] sm:inline-flex border border-ink px-3.5 py-2.5 text-[14px] font-medium text-ink sm:px-4 sm:text-[15px] no-underline transition-colors hover:bg-ink hover:text-paper">How it works</Link>
             </div>
-            <div className="num mt-2 flex flex-wrap gap-1.5 text-[clamp(14px,1.4vw,20px)] lg:justify-end">
-              <span className="tape">mm/day</span>
-              <span className="tape">raw {w.raw_mm.toFixed(1)}</span>
-              <span className="tape">{fmtLat(w.lat)} {fmtLon(w.lon)}</span>
-              <span className="tape">P(heavy) {Math.round(w.p_heavy * 100)}%</span>
-              <span className="tape" style={{ boxShadow: `inset 4px 0 0 ${REGIME[w.regime].color}`, paddingLeft: '0.5em' }}>{REGIME[w.regime].label}</span>
-              <span className="tape">{fmtDay(w.valid_date)} · +{grid.leads[w.lead].lead_hours} h</span>
-            </div>
+            <dl className="mt-5 grid grid-cols-4 gap-3 border-t border-ink pt-4 sm:mt-7 sm:gap-5" data-testid="hero-telemetry">
+              {[
+                [<NumberTicker key="c" value={w.corrected_mm} decimals={1} duration={2.2} />, 'mm/day corrected, wettest point'],
+                [w.raw_mm.toFixed(1), 'mm/day raw forecast there'],
+                [`${Math.round(w.p_heavy * 100)}%`, `chance of heavy rain (≥ ${m.thresholds_mm.heavy} mm)`],
+                [REGIME_ORDER.length - 1, 'rain regimes, each with its own curve'],
+              ].map(([v, label], i) => (
+                <div key={i} className="min-w-0">
+                  <dt className="sr-only">{label}</dt>
+                  <dd className="num text-[length:clamp(20px,2vw,30px)] font-medium leading-none tracking-[-0.03em]">{v}</dd>
+                  <dd className="mt-1.5 text-[11.5px] leading-[1.35] text-ink-2 sm:text-[12.5px]">{label}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
-        <Link to="/forecast" className="tape tape-ink absolute right-5 top-16 hidden rounded-[3px] md:inline-block px-3 py-2 text-[14px] font-medium no-underline md:right-8">Open the forecast map →</Link>
+        {/* what the backdrop is showing */}
+        <div className={`${glass} absolute bottom-6 right-4 hidden w-[330px] p-3.5 md:right-8 lg:block`} data-testid="hero-legend">
+          <p className="eyebrow">Corrected rain · mm/day · {fmtDay(w.valid_date)}</p>
+          <div className="mt-2 h-2.5 rounded-[2px] border border-ink/15" style={{ background: `linear-gradient(90deg, ${RAIN.map(([v, c]) => `${c} ${(v / 200) * 100}%`).join(',')})` }} />
+          <div className="relative mt-1 h-3.5 font-mono text-[10.5px] text-ink-2">
+            {[1, 35, 64.5, 124.5, 200].map((t) => <span key={t} className="absolute -translate-x-1/2 last:-translate-x-full" style={{ left: `${(t / 200) * 100}%` }}>{t}</span>)}
+          </div>
+          <p className="mt-2 text-[12px] leading-snug text-ink-2">
+            +{grid.leads[w.lead].lead_hours} h ahead. Circle marks the wettest point: {fmtLat(w.lat)} {fmtLon(w.lon)}, a{' '}
+            <span className="inline-flex items-center gap-1 text-ink"><span className="inline-block h-2 w-2 rounded-[2px]" style={{ background: REGIME[w.regime].color }} aria-hidden="true" />{REGIME[w.regime].label.toLowerCase()}</span> day. Lines show 850 hPa wind. Faded outside India.
+          </p>
+        </div>
       </section>
 
       {/* ---------------------------------------------------------------- vocabulary strip */}
