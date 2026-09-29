@@ -32,7 +32,10 @@ def check_hres():
     import xarray as xr
     ds = xr.open_zarr(HRES_URL, storage_options={"token": "anon"})
     precip = [v for v in ds.data_vars if "precip" in v]
-    lead_h = (ds.prediction_timedelta.values / np.timedelta64(1, "h")).astype(float)
+    from regimerain.ingest.align import lead_hours
+    lead_h = lead_hours(ds.prediction_timedelta)
+    info_dtype = {"prediction_timedelta_dtype": str(ds.prediction_timedelta.dtype),
+                  "prediction_timedelta_units": ds.prediction_timedelta.attrs.get("units")}
     info = {
         "precip_vars": {v: {"units": ds[v].attrs.get("units"), "dims": list(ds[v].dims)} for v in precip},
         "first_leads_h": lead_h[:6].tolist(),
@@ -40,6 +43,7 @@ def check_hres():
         "lat_ascending": bool(ds.latitude.values[0] < ds.latitude.values[-1]),
         "levels": sorted(int(x) for x in ds.level.values) if "level" in ds.dims else None,
         "vars": sorted(ds.data_vars),
+        **info_dtype,
     }
     missing_levels = NEEDED_LEVELS - set(info["levels"] or [])
     info["precip_consistency"] = hres_precip_consistency(ds)
@@ -53,7 +57,8 @@ def hres_precip_consistency(ds):
     Reads one monsoon init, leads 0-30 h, over a central-India box (small, fast)."""
     import numpy as np
     box = dict(latitude=slice(18, 28), longitude=slice(70, 88))
-    one = ds.sel(time="2019-07-15T00:00", **box).isel(prediction_timedelta=slice(0, 6))
+    one = ds.sel(**box).isel(prediction_timedelta=slice(0, 6))
+    one = one.sel(time=one.time.values[(one.time.values >= np.datetime64("2019-07-15"))][0])
     tp = one["total_precipitation"].mean(["latitude", "longitude"]).values.astype(float)
     tp6 = one["total_precipitation_6hr"].mean(["latitude", "longitude"]).values.astype(float)
     d = np.diff(tp)

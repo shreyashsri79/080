@@ -16,10 +16,29 @@ def rainday_window(lead: int) -> tuple[float, float]:
     return 3.0 + 24 * (lead - 1), 27.0 + 24 * (lead - 1)
 
 
+_UNIT_HOURS = {"hours": 1.0, "hour": 1.0, "h": 1.0, "minutes": 1 / 60, "seconds": 1 / 3600,
+               "s": 1 / 3600, "days": 24.0, "day": 24.0, "nanoseconds": 1 / 3.6e12, "ns": 1 / 3.6e12}
+
+
+def lead_hours(coord: xr.DataArray) -> np.ndarray:
+    """Lead times as float hours, whether decoded (timedelta64) or raw numbers with a `units` attribute.
+
+    Recent xarray versions no longer decode timedeltas by default, so WeatherBench2's
+    `prediction_timedelta` can arrive as int64 with units "hours" (seen in Phase 0, run 2).
+    """
+    v = np.asarray(coord.values)
+    if np.issubdtype(v.dtype, np.timedelta64):
+        return (v / np.timedelta64(1, "h")).astype("float64")
+    units = str(coord.attrs.get("units", "hours")).split(" since ")[0].strip().lower()
+    if units not in _UNIT_HOURS:
+        raise ValueError(f"unknown lead-time units {units!r}")
+    return v.astype("float64") * _UNIT_HOURS[units]
+
+
 def to_hours(da: xr.DataArray, dim: str = "prediction_timedelta") -> xr.DataArray:
-    """Replace a timedelta lead dimension with a float `hour` dimension."""
-    hrs = (da[dim] / np.timedelta64(1, "h")).astype("float64")
-    return da.assign_coords(hour=(dim, hrs.values)).swap_dims({dim: "hour"}).drop_vars(dim)
+    """Replace a lead dimension (timedelta64 or numeric with units) with a float `hour` dimension."""
+    hrs = lead_hours(da[dim])
+    return da.assign_coords(hour=(dim, hrs)).swap_dims({dim: "hour"}).drop_vars(dim)
 
 
 def cumulative_from_buckets(tp: xr.DataArray) -> xr.DataArray:

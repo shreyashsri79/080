@@ -12,10 +12,17 @@ Results of `scripts/phase0_check.py` (docs/MODEL_SPEC.md section 3). Update this
 | **IMD (imdlib)** | FAIL, script bug | `imdlib.get_data` does not create its target folder, so the IMD server was never contacted. | Script fixed (creates the folder). **Rerun.** |
 | **MJO RMM (BOM)** | FAIL | `HTTP 403 Forbidden` from `bom.gov.au`. Probably a block on Python's default User-Agent. | Script now sends an explicit User-Agent and accepts a manually downloaded copy via `RMM_FILE=<path>`. **Rerun.** If it still fails, download `rmm.74toRealtime.txt` in a browser and upload it to `MyDrive/ps26080/inputs/mjo/`. |
 
+**Run 2: 29 Sep 2026, Google Colab, code at `55754fb`**
+
+| Check | Status | Finding | Consequence |
+|---|---|---|---|
+| **HRES** | FAIL, code bug | `prediction_timedelta` arrives as **int64 with a `units` attribute (hours)**, not timedelta64: recent xarray no longer decodes timedeltas by default. | Added `regimerain.ingest.align.lead_hours()` (handles both forms), used by `to_hours` and the script, plus a regression test. **Rerun.** |
+| **MJO RMM (BOM)** | FAIL | 403 on http and https, even with an explicit User-Agent. BOM blocks cloud-server addresses. | **Manual download**: save `rmm.74toRealtime.txt` in a browser, upload it to `MyDrive/ps26080/inputs/mjo/`, point `RMM_FILE` at it. The live demo needs a fresh copy the same way; if it is more than 3 days old, MJO features are set to neutral (MODEL_SPEC 18.2). |
+
 ## Still to check
 
 - [ ] HRES precipitation consistency (run 2 output: `precip_consistency`).
 - [ ] IMD download from Colab, and IMD's date convention (MODEL_SPEC 4.3; needs the forecast ingest first).
-- [ ] MJO via User-Agent or manual file.
+- [ ] MJO from the manually downloaded file.
 - [ ] Monsoon LPS track dataset host (not scripted).
 - [ ] DEM and GADM downloads and licence notes (not scripted).

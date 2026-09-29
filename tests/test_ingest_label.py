@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from regimerain.ingest.align import cumulative_from_buckets, rainday_totals, rainday_window, to_hours
+from regimerain.ingest.align import cumulative_from_buckets, lead_hours, rainday_totals, rainday_window, to_hours
 from regimerain.label.active_break import (ACTIVE, BREAK, DEPRESSION, NORMAL, active_break, circular_smooth,
                                            day_level_label, runs_at_least, synoptic_labels)
 from regimerain.label.depression import depression_mask, haversine_km
@@ -16,6 +16,18 @@ def buckets(values_m):
     return xr.DataArray(data, dims=("init", "prediction_timedelta"),
                         coords={"init": [np.datetime64("2019-07-01T00")],
                                 "prediction_timedelta": hours.astype("timedelta64[h]")})
+
+
+def test_undecoded_integer_lead_hours_work_too():
+    """Recent xarray leaves prediction_timedelta as int64 + units attr (Phase 0 run 2)."""
+    tp6 = buckets(np.full(22, 0.012))
+    raw = tp6.assign_coords(prediction_timedelta=("prediction_timedelta",
+                                                  (tp6.prediction_timedelta.values / np.timedelta64(1, "h")).astype("int64"),
+                                                  {"units": "hours"}))
+    a = rainday_totals(cumulative_from_buckets(to_hours(tp6)))
+    b = rainday_totals(cumulative_from_buckets(to_hours(raw)))
+    assert np.allclose(a.values, b.values) and np.allclose(b.values, 48.0)
+    assert lead_hours(raw.prediction_timedelta)[:3].tolist() == [0.0, 6.0, 12.0]
 
 
 def test_rainday_windows():
