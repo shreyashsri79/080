@@ -2,7 +2,7 @@ import * as maplibregl from 'maplibre-gl'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Drop } from '../components/Chrome'
+import { Drop, hasRunStrip } from '../components/Chrome'
 import { GEO, PROB, RAIN, REGIME, REGIME_ORDER, WIND, type Stop } from '../lib/color'
 import { cellAt, feather, isRain, makeParticles, prefersReducedMotion } from '../lib/field'
 import { fmtDay, fmtLat, fmtLon, fmtMm, fmtPct } from '../lib/format'
@@ -12,7 +12,8 @@ import { OSM_COPYRIGHT } from '../lib/osm'
 import { setBasemap, setField, setTrack, useForecastMaps } from '../map/useForecastMaps'
 
 type Layer = 'rain' | 'regime' | 'heavy' | 'very_heavy' | 'wind'
-type Variant = 'raw' | 'corrected' | 'compare'
+/** 'observed' exists only in replay runs (grid.layers.truth). */
+type Variant = 'raw' | 'corrected' | 'observed' | 'compare'
 
 const LAYERS: { id: Layer; label: string; short: string; icon: React.ReactNode }[] = [
   { id: 'rain', label: 'Rainfall', short: 'Rain', icon: <path d="M12 3c-3.3 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2.7-6-6-11z" /> },
@@ -28,7 +29,7 @@ const available = (layers: string[], l: Layer) =>
   l === 'rain' || l === 'regime' ? true : l === 'heavy' ? layers.includes('p_heavy') : l === 'very_heavy' ? layers.includes('p_very_heavy') : layers.includes('wind850')
 
 const fieldOf = (l: Layer, v: Variant, side: 'A' | 'B'): FieldLayer =>
-  l === 'rain' ? (v === 'raw' || (v === 'compare' && side === 'A') ? 'raw' : 'corrected')
+  l === 'rain' ? (v === 'raw' || (v === 'compare' && side === 'A') ? 'raw' : v === 'observed' ? 'truth' : 'corrected')
     : l === 'regime' ? 'regime' : l === 'heavy' ? 'p_heavy' : l === 'very_heavy' ? 'p_very_heavy' : 'wind850'
 
 function valueText(run: Run, f: FieldLayer, lead: number, lat: number, lon: number, short = false): string | null {
@@ -136,7 +137,7 @@ export default function Forecast() {
     const A = maps.current.A!
     // over the street map, particles fade out toward the data edge like the field does
     const fade = (lon: number, lat: number) => feather(grid, lon, lat)
-    const parts = makeParticles(grid, () => leadRef.current, 2600, layer === 'wind' ? 0.7 : 0.5, () => (tilesRef.current ? fade : null))
+    const parts = makeParticles(grid, () => leadRef.current, 2600, layer === 'wind' ? 0.7 : 0.5, () => (tilesRef.current ? fade : null), undefined, run.displayWind)
     let raf = 0, moving = false, dpr = 1, W = 0, H = 0
     const size = () => {
       const r = stage.current!.getBoundingClientRect()
@@ -229,7 +230,7 @@ export default function Forecast() {
   const swipeX = `${swipe * 100}%`
 
   return (
-    <main className="relative h-[calc(100svh_-_var(--banner,0px))] overflow-hidden bg-sea" data-testid="forecast" style={{ ['--banner' as string]: manifest.synthetic ? '30px' : '0px' }}>
+    <main className="relative h-[calc(100svh_-_var(--banner,0px))] overflow-hidden bg-sea" data-testid="forecast" style={{ ['--banner' as string]: hasRunStrip(manifest) ? '30px' : '0px' }}>
       <div ref={stage} className="absolute inset-0">
         {/* MapLibre forces position: relative on its container, so each map sits inside its own absolute box */}
         <div className="absolute inset-0"><div ref={aEl} className="h-full w-full" data-testid="map" /></div>
@@ -257,7 +258,7 @@ export default function Forecast() {
         <PlaceSearch places={run.places} onPick={flyTo} />
         {layer === 'rain' && (
           <div className="pointer-events-auto flex h-10 overflow-hidden rounded-[4px] bg-paper p-1 shadow-[0_1px_4px_rgba(14,26,31,0.18)]" role="radiogroup" aria-label="Forecast variant" data-testid="variant">
-            {(['raw', 'corrected', 'compare'] as Variant[]).map((v) => (
+            {(['raw', 'corrected', ...(manifest.layers.includes('truth') ? ['observed'] : []), 'compare'] as Variant[]).map((v) => (
               <button key={v} role="radio" aria-checked={variant === v} onClick={() => setVariant(v)}
                 className={`rounded-[3px] px-3 text-[13.5px] font-medium capitalize transition-colors ${variant === v ? 'bg-ink text-paper' : 'text-ink hover:bg-[#e3e8e6]'}`}>
                 {v}
@@ -285,9 +286,9 @@ export default function Forecast() {
           ))}
         </div>
         <div className="mt-1 hidden border-t border-rule pt-1.5 md:block">
-          <Toggle on={particlesOn} set={setParticlesOn} label="Wind particles" />
+          {(manifest.layers.includes('wind850') || run.displayWind) && <Toggle on={particlesOn} set={setParticlesOn} label={run.displayWind ? 'Wind (decorative)' : 'Wind particles'} />}
           <Toggle on={placesOn} set={setPlacesOn} label="Place values" />
-          <Toggle on={trackOn} set={setTrackOn} label="Depression track" />
+          {manifest.depression_track.length > 0 && <Toggle on={trackOn} set={setTrackOn} label="Depression track" />}
           <Toggle on={basemap} set={setBasemapOn} label="Street map" />
         </div>
       </aside>
@@ -364,7 +365,7 @@ function LegendBar({ layer, variant, th }: { layer: Layer; variant: Variant; th:
       </div>
     )
   const [stops, unit, ticks, title]: [Stop[], string, number[], string] =
-    layer === 'rain' ? [RAIN, 'mm/day', [1, 15, 35, th.heavy, th.very_heavy, 200], variant === 'raw' ? 'Raw forecast rain' : variant === 'compare' ? 'Rain · raw | corrected' : 'Corrected rain']
+    layer === 'rain' ? [RAIN, 'mm/day', [1, 15, 35, th.heavy, th.very_heavy, 200], variant === 'raw' ? 'Raw forecast rain' : variant === 'observed' ? 'Observed rain' : variant === 'compare' ? 'Rain · raw | corrected' : 'Corrected rain']
       : layer === 'wind' ? [WIND, 'm/s', [0, 4, 8, 12, 16, 22], 'Wind speed at 850 hPa']
         : [PROB, '', [0, 0.3, 0.5, 0.7, 1], `Chance of ≥ ${layer === 'heavy' ? th.heavy : th.very_heavy} mm/day`]
   const max = stops[stops.length - 1][0]
@@ -458,7 +459,8 @@ function PointPanel({ run, sel, lead, setLead, onClose }: { run: Run; sel: { lat
   const reduce = useReducedMotion()
   const c = cellAt(grid, sel.lat, sel.lon)!
   /** Value at this cell, or null when the layer is not in this run. */
-  const at = (k: 'raw' | 'corrected' | 'p_heavy' | 'p_very_heavy', l: number) => grid.layers[k]?.[l][c.idx] ?? null
+  const at = (k: 'raw' | 'corrected' | 'truth' | 'p_heavy' | 'p_very_heavy', l: number) => grid.layers[k]?.[l][c.idx] ?? null
+  const hasTruth = manifest.layers.includes('truth')
   const regIdx = grid.layers.regime[lead][c.idx]
   const regime: Regime = REGIME_ORDER[regIdx]
   const nSyn = grid.synoptic.length
@@ -545,6 +547,7 @@ function PointPanel({ run, sel, lead, setLead, onClose }: { run: Run; sel: { lat
             ['Terrain class', geo ? GEO[geo].label : '—', 'static: from elevation and distance to the coast'],
             ['Curves blended', curve?.id ?? '—', curve ? `regime curves weighted by probability; ${REGIME[regime].label.toLowerCase()} curve fitted on ${curve.n_days.toLocaleString()} past days` : 'no curve file in this run'],
             ['Corrected', `${fmtMm(at('corrected', lead))} mm/day`, hasP ? `P(heavy) ${fmtPct(at('p_heavy', lead))}` : 'heavy-rain chance: not in this run'],
+            ...(hasTruth ? [['What fell', `${fmtMm(at('truth', lead))} mm/day`, manifest.truth_source ?? 'observed']] : []),
           ].map(([k, v, note], i, arr) => (
             <motion.li key={k} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.12 }}
               className="relative grid grid-cols-[18px_1fr] gap-3 pb-3">

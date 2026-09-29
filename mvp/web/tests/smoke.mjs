@@ -27,7 +27,7 @@ const has = (page, id) => page.$(`[data-testid="${id}"]`).then(Boolean)
 let p = await open('/')
 check('landing loads', await has(p, 'landing'))
 check('hero shows run telemetry', await has(p, 'hero-telemetry'))
-check('synthetic banner shown for sample run', await has(p, 'synthetic-banner'))
+check('no top banner for sample run', !(await has(p, 'synthetic-banner')))
 
 p = await open('/forecast')
 check('forecast map mounts', (await p.$$('.maplibregl-canvas')).length === 2)
@@ -51,8 +51,12 @@ check('search opens point panel', await has(p, 'point-panel'))
 check('correction trace shown', await has(p, 'correction-trace'))
 
 p = await open('/scorecard')
-check('scorecard renders metric bars', await has(p, 'metric-bars'))
-check('regime delta matrix renders', await has(p, 'delta-matrix'))
+if (await has(p, 'no-report')) {
+  check('scorecard says plainly that this run has no report', true)          // interim runs: nothing faked
+} else {
+  check('scorecard renders metric bars', await has(p, 'metric-bars'))
+  check('regime delta matrix renders', await has(p, 'delta-matrix'))
+}
 p = await open('/method')
 check('method renders', await has(p, 'method'))
 p = await open('/bulletin')

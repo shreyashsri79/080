@@ -21,7 +21,12 @@ const MODELS = [
 
 export default function Method() {
   const { manifest } = useRun()
-  const state = manifest.synthetic ? 'Not trained yet · sample run' : 'Trained · see manifest'
+  const season = manifest.provenance.held_out_season
+  const state = manifest.synthetic ? 'Not trained yet · sample run'
+    : manifest.kind === 'replay' ? `Backtest fold models${season ? ` · ${season} held out` : ''}` : 'Final model set · see manifest'
+  // interim runs: real data, with a named stand-in per stage until the model set is trained
+  const interim = ['Training · regime = the issue day’s observed label', 'Training · a skill-weighted multi-model blend stands in', 'Training · layer hidden until trained']
+  const stateOf = (i: number) => (manifest.kind === 'interim' ? interim[i] : state)
   return (
     <>
       <Nav />
@@ -33,7 +38,7 @@ export default function Method() {
           {[
             [`${manifest.thresholds_mm.heavy}`, 'mm/day', 'IMD heavy rainfall'],
             [`${manifest.thresholds_mm.very_heavy}`, 'mm/day', 'IMD very heavy rainfall'],
-            [`${manifest.grid_step_deg}°`, 'grid', manifest.synthetic ? 'This run (spec: 0.25°)' : 'Forecast working grid'],
+            [`${manifest.grid_step_deg}°`, 'grid', 'Forecast working grid'],
             ['6', 'metrics', 'RMSE, ETS, CSI, POD, FAR, FSS'],
           ].map(([v, u, l]) => (
             <FadeUp key={l}>
@@ -55,7 +60,7 @@ export default function Method() {
                 <dl className="mt-4 grid gap-3 text-[14px]">
                   <div><dt className="eyebrow">Inputs</dt><dd className="m-0 mt-1 text-ink-2">{inputs}</dd></div>
                   <div><dt className="eyebrow">Output</dt><dd className="m-0 mt-1">{out}</dd></div>
-                  <div><dt className="eyebrow">State</dt><dd className={`num m-0 mt-1 text-[13px] ${manifest.synthetic ? 'text-warn' : 'text-good'}`}>{state}</dd></div>
+                  <div><dt className="eyebrow">State</dt><dd className={`num m-0 mt-1 text-[13px] ${manifest.synthetic || manifest.kind === 'interim' ? 'text-warn' : 'text-good'}`}>{stateOf(i)}</dd></div>
                 </dl>
               </FadeUp>
             ))}

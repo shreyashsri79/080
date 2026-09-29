@@ -59,7 +59,7 @@ export function FieldStage({ run, layer, lead, anchorX = 0.5, anchorY = 0.5, lat
     const s = state.current
     if (reduce) s.sweep = 1
     const fade = basemap ? emphasis(run.grid, mask, outsideIndia) : null
-    const parts = makeParticles(run.grid, () => leadRef.current, 1500, 0.45, () => fade)
+    const parts = makeParticles(run.grid, () => leadRef.current, 1500, 0.45, () => fade, undefined, run.displayWind)
     const gb = gridBounds(run.grid)
     let W = 0, H = 0, dpr = 1, raf = 0, dirty = true, last = -1
     let proj: (lon: number, lat: number) => [number, number] = () => [0, 0]

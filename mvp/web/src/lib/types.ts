@@ -8,7 +8,7 @@
 export type Regime = 'active' | 'break' | 'depression' | 'normal'
 export type GeoClass = 'plains' | 'coastal' | 'orographic'
 export type Threshold = 'heavy' | 'very_heavy'
-export type RunKind = 'mock' | 'replay' | 'model'
+export type RunKind = 'mock' | 'replay' | 'interim' | 'model'
 /** rmse, ets, csi, pod, far, and fss_<window in cells> from verification.fss_windows. */
 export type MetricKey = 'rmse' | 'ets' | 'csi' | 'pod' | 'far' | `fss_${number}`
 export type FieldLayer = 'raw' | 'corrected' | 'corrected_global' | 'truth' | 'p_heavy' | 'p_very_heavy' | 'regime' | 'wind850'
@@ -42,6 +42,7 @@ export interface Manifest {
     raw_mm: number; corrected_mm: number; p_heavy?: number; p_very_heavy?: number; regime: Regime; geo: GeoClass
   }
   provenance: Provenance
+  files?: string[]            // files in this export; optional ones listed only when written
 }
 
 type Row = (number | null)[]
@@ -111,9 +112,18 @@ export interface QmCurve {
   quantiles: number[]; forecast_mm: number[]; truth_mm: number[]
 }
 
+/** Decorative wind for particles when a run has no 850 hPa wind (lib/heroWind.ts). Never data. */
+export interface DisplayWind {
+  label: string
+  /** [u east, v north] in rough m/s at a longitude, latitude and time in seconds. */
+  at: (lon: number, lat: number, t: number) => [number, number]
+}
+
 export interface Run {
   manifest: Manifest; grid: Grid; places: Place[]; verification: Verification | null
   curves: QmCurve[]; land: GeoJSON.FeatureCollection
+  /** Particle wind when the run has none of its own. */
+  displayWind?: DisplayWind
   /** Survey of India outline, drawn over any basemap. */
   india: GeoJSON.FeatureCollection
 }

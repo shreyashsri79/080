@@ -1,5 +1,5 @@
 import { PROB, RAIN, REGIME_ORDER, WIND, rampRGB, regimeRGB, type Stop } from './color'
-import type { FieldLayer, Grid } from './types'
+import type { DisplayWind, FieldLayer, Grid } from './types'
 
 export const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
 export const invMercY = (y: number) => (360 / Math.PI) * Math.atan(Math.exp(y)) - 90
@@ -215,7 +215,7 @@ const TRAIL_FADE = 0.8
  * `fade` (read every frame) gives each particle's opacity 0..1, drawn in four alpha buckets.
  * Cost per frame: one projection and one line segment per particle.
  */
-export function makeParticles(g: Grid, lead: () => number, count = 1400, opacity = 0.45, fade: () => ((lon: number, lat: number) => number) | null = () => null, speed = 0.3): Particles {
+export function makeParticles(g: Grid, lead: () => number, count = 1400, opacity = 0.45, fade: () => ((lon: number, lat: number) => number) | null = () => null, speed = 0.3, flow?: DisplayWind): Particles {
   const b = gridBounds(g)
   const midLon = (b.west + b.east) / 2, midLat = (b.south + b.north) / 2
   type P = { lon: number; lat: number; age: number; max: number }
@@ -234,8 +234,9 @@ export function makeParticles(g: Grid, lead: () => number, count = 1400, opacity
   const wind = (lat: number, lon: number): [number, number] => {
     const L = lead()
     const fi = (lat - g.lat0) / g.step, fj = (lon - g.lon0) / g.step
-    if (!g.layers.u850 || !g.layers.v850) return [0, 0]
-    return [bilinear(g.layers.u850[L], g, fi, fj) ?? 0, bilinear(g.layers.v850[L], g, fi, fj) ?? 0]
+    if (g.layers.u850 && g.layers.v850)
+      return [bilinear(g.layers.u850[L], g, fi, fj) ?? 0, bilinear(g.layers.v850[L], g, fi, fj) ?? 0]
+    return flow ? flow.at(lon, lat, performance.now() / 1000) : [0, 0]      // decorative, same for every lead
   }
   return {
     reset() { ps = ps.map((p) => spawn(p)); seen.fill(0) },

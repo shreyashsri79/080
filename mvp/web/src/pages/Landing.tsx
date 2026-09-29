@@ -63,7 +63,7 @@ export default function Landing() {
               {[
                 [<NumberTicker key="c" value={w.corrected_mm} decimals={1} duration={2.2} />, 'mm/day corrected, wettest point'],
                 [w.raw_mm.toFixed(1), 'mm/day raw forecast there'],
-                w.p_heavy != null ? [`${Math.round(w.p_heavy * 100)}%`, `chance of heavy rain (≥ ${m.thresholds_mm.heavy} mm)`] : [REGIME[w.regime].label, 'regime predicted there'],
+                w.p_heavy != null ? [`${Math.round(w.p_heavy * 100)}%`, `chance of heavy rain (≥ ${m.thresholds_mm.heavy} mm)`] : [REGIME[w.regime].label, m.kind === 'interim' ? 'regime of the day there (observed label)' : 'regime predicted there'],
                 [`${REGIME_ORDER.length}×${GEO_ORDER.length}`, 'regimes × terrain classes, each with its own curves'],
               ].map(([v, label], i) => (
                 <div key={i} className="min-w-0">
@@ -84,7 +84,7 @@ export default function Landing() {
           </div>
           <p className="mt-2 text-[12px] leading-snug text-ink-2">
             +{grid.leads[w.lead].lead_hours} h ahead. Circle marks the wettest point: {fmtLat(w.lat)} {fmtLon(w.lon)}, a{' '}
-            <span className="inline-flex items-center gap-1 text-ink"><span className="inline-block h-2 w-2 rounded-[2px]" style={{ background: REGIME[w.regime].color }} aria-hidden="true" />{REGIME[w.regime].label.toLowerCase()}</span> day. Lines show 850 hPa wind. Faded outside India.
+            <span className="inline-flex items-center gap-1 text-ink"><span className="inline-block h-2 w-2 rounded-[2px]" style={{ background: REGIME[w.regime].color }} aria-hidden="true" />{REGIME[w.regime].label.toLowerCase()}</span> day.{m.layers.includes('wind850') ? ' Lines show 850 hPa wind.' : run.displayWind ? ` Lines show ${run.displayWind.label ?? 'a fixed wind field, not this forecast'}.` : ''} Faded outside India.
           </p>
         </div>
       </section>
@@ -160,7 +160,7 @@ export default function Landing() {
 
       {/* ---------------------------------------------------------------- close */}
       <section className="relative overflow-hidden border-t border-ink">
-        <FieldStage run={run} layer="p_heavy" lead={Math.min(grid.leads.length - 1, 2)} anchorX={wide ? 0.72 : 0.5} particles track className="absolute inset-0 opacity-90" />
+        <FieldStage run={run} layer={m.layers.includes('p_heavy') ? 'p_heavy' : 'corrected'} lead={Math.min(grid.leads.length - 1, 2)} anchorX={wide ? 0.72 : 0.5} particles track className="absolute inset-0 opacity-90" />
         <div className="relative px-5 py-28 md:px-8 md:py-40">
           <Link to="/forecast" className="group no-underline" data-testid="cta-forecast">
             <span className="display block text-[length:var(--hero)] text-ink">
@@ -226,7 +226,7 @@ function Pipeline() {
               <p className="num text-[13px] text-ink-2">Step {i + 1} of {steps.length}</p>
               <h3 className="display mt-3 text-[length:clamp(34px,4.2vw,64px)]">{s.title}</h3>
               <p className="mt-5 max-w-[44ch] text-[17px] leading-[1.6] text-ink-2">{s.body}</p>
-              {s.title.startsWith('Correct') && (
+              {s.title.startsWith('Correct') && run.curves.length > 0 && (
                 <div className="mt-8 max-w-[480px] rounded-[4px] border border-rule bg-surface p-4">
                   <QmChart curves={run.curves} show={['global', 'depression', 'break']} height={260} />
                 </div>

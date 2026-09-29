@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "smoke": "node tests/smoke.mjs",
     "sample": "cd ../.. && python3 -m regimerain.cli run --source mock --publish sample",
-    "geo": "python3 ../tools/make_sample_run.py"
+    "geo": "python3 ../tools/make_sample_run.py",
+    "dev:api": "API_PROXY=http://127.0.0.1:8000 vite"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

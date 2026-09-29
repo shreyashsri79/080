@@ -1,13 +1,40 @@
 import { NavLink, Link } from 'react-router-dom'
-import { useRun } from '../lib/run'
+import { useRun, useRunState } from '../lib/run'
+import type { Run } from '../lib/types'
 
-export function SyntheticBanner() {
+/** Whether a run gets the thin strip above the page (the forecast map subtracts its height). */
+export const hasRunStrip = (m: Run['manifest']) => m.kind === 'replay' || m.kind === 'interim'
+
+/** Says what kind of run is on screen: replay and interim runs get a strip; model and sample runs don't
+ * (a sample run is still marked "sample values" beside its scores, in the method state and the bulletin). */
+export function RunBanner() {
   const { manifest } = useRun()
-  if (!manifest.synthetic) return null
+  const { api, runs } = useRunState()
+  if (!hasRunStrip(manifest)) return null
+  const picker = api && runs.length > 1 && (
+    <select aria-label="Run" value={manifest.run_id} onChange={(e) => { location.search = `?run=${encodeURIComponent(e.target.value)}` }}
+      className="ml-3 max-w-[40vw] cursor-pointer rounded-[3px] border border-current/30 bg-transparent px-1 py-0.5 font-mono text-[11px]">
+      {runs.map((r) => <option key={r.run_id} value={r.run_id}>{r.kind === 'interim' ? 'forecast' : r.kind} · {r.forecast_issue_date}{r.held_out_season ? ` · held out ${r.held_out_season}` : ''}</option>)}
+    </select>
+  )
+  if (manifest.kind === 'interim')
+    return (
+      <div data-testid="interim-banner" className="no-print relative z-50 flex h-[30px] items-center justify-center overflow-hidden whitespace-nowrap bg-[#dfeaec] px-4 text-center font-mono text-[11.5px] tracking-wide text-ink">
+        <span className="truncate sm:hidden">Forecast of {manifest.forecast_issue_date} · interim correction</span>
+        <span className="hidden truncate sm:inline">
+          Forecast issued {manifest.forecast_issue_date} · ECMWF HRES, corrected by a skill-weighted multi-model blend until the regime-aware model is trained
+        </span>
+        {picker}
+      </div>
+    )
+  const season = manifest.provenance.held_out_season
   return (
-    <div data-testid="synthetic-banner" className="no-print relative z-50 flex h-[30px] items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap bg-[#fff1c9] px-4 text-center font-mono text-[11.5px] tracking-wide text-[#5f4300]">
-      <span className="sm:hidden">Sample run · invented values · not a forecast</span>
-      <span className="hidden sm:inline">Sample run with invented values. Not a forecast, not a measurement. Real runs replace it without UI changes.</span>
+    <div data-testid="replay-banner" className="no-print relative z-50 flex h-[30px] items-center justify-center overflow-hidden whitespace-nowrap bg-[#dfeaec] px-4 text-center font-mono text-[11.5px] tracking-wide text-ink">
+      <span className="truncate sm:hidden">Hindcast · {manifest.forecast_issue_date}{season ? ` · ${season} held out` : ''}</span>
+      <span className="hidden truncate sm:inline">
+        Hindcast issued {manifest.forecast_issue_date}{season ? `. The ${season} season was held out of training` : ''}; compared with {manifest.truth_source ?? 'observed rain'}.
+      </span>
+      {picker}
     </div>
   )
 }
