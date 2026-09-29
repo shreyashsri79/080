@@ -39,9 +39,25 @@ def climatology_years(cfg: dict, seasons) -> list[int]:
     return list(range(a, b + 1))
 
 
+def available_climatology(cfg: dict, clim: list[int], seasons, log=print, min_years: int = 25) -> list[int]:
+    """Drop climatology years with no IMD data (neither .grd nor converted zarr); fail if too few remain."""
+    if cfg["labels"].get("climatology", "imd") == "self":
+        return clim
+    from regimerain.ingest.imd import year_file
+    from regimerain.truth import truth_path
+    have = [y for y in clim if truth_path(cfg, y).exists() or year_file(cfg["paths"]["imd"], y).exists()]
+    missing = sorted(set(clim) - set(have))
+    if missing:
+        if len(have) < min_years:
+            raise FileNotFoundError(f"IMD climatology years missing {missing}: only {len(have)} available, "
+                                    f"need {min_years}. Rerun `ingest --imd-climatology ...`")
+        log(f"label: WARNING climatology without {missing} ({len(have)} years used)")
+    return have
+
+
 def build_labels(cfg: dict, seasons, log=print) -> dict[int, Path]:
     lab_cfg = cfg["labels"]
-    clim = climatology_years(cfg, seasons)
+    clim = available_climatology(cfg, climatology_years(cfg, seasons), seasons, log=log)
     prepare_truth(cfg, sorted(set(clim) | set(seasons)), log=log)
     static = load_static(cfg)
     land = static["land"].astype(bool)

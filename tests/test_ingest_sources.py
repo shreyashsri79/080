@@ -149,3 +149,16 @@ def test_cli_ingest_mjo_from_file(tmp_path, monkeypatch):
     assert cli.main(["ingest", "--only", "mjo", "--years", "2019", "--data-root", str(tmp_path)]) == 0
     out = pd.read_parquet(tmp_path / "data" / "raw" / "mjo" / "rmm.parquet")
     assert len(out) == 2
+
+
+def test_climatology_tolerates_a_few_missing_years(tmp_path):
+    from regimerain.label.build import available_climatology
+    cfg = deep_merge(load_config(), {"paths": {"imd": str(tmp_path / "imd"), "raw": str(tmp_path / "raw")}})
+    (tmp_path / "imd" / "rain").mkdir(parents=True)
+    for y in range(1981, 2016):
+        if y != 1983:
+            (tmp_path / "imd" / "rain" / f"{y}.grd").write_bytes(b"x")
+    have = available_climatology(cfg, list(range(1981, 2016)), [2019], log=lambda *_: None)
+    assert 1983 not in have and len(have) == 34
+    with pytest.raises(FileNotFoundError):
+        available_climatology(cfg, list(range(1981, 2016)), [2019], log=lambda *_: None, min_years=35)

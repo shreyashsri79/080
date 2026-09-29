@@ -20,16 +20,34 @@ def missing_years(imd_dir: str | Path, years) -> list[int]:
     return [y for y in years if not year_file(imd_dir, y).exists()]
 
 
-def download(imd_dir: str | Path, years, log=print) -> None:
+def download(imd_dir: str | Path, years, log=print, attempts: int = 3, wait_s: float = 10.0) -> list[int]:
+    """Download missing years one by one, verifying each file; returns the years that still failed."""
+    import time
     import imdlib as imd
     todo = missing_years(imd_dir, years)
     if not todo:
         log("imd: all years present")
-        return
+        return []
     os.makedirs(imd_dir, exist_ok=True)                  # imdlib does not create its folder
+    failed = []
     for y in todo:                                       # one year at a time: resumable
-        log(f"imd: downloading {y}")
-        imd.get_data("rain", y, y, fn_format="yearwise", file_dir=str(imd_dir))
+        for attempt in range(1, attempts + 1):
+            log(f"imd: downloading {y} (attempt {attempt})")
+            try:
+                imd.get_data("rain", y, y, fn_format="yearwise", file_dir=str(imd_dir))
+            except Exception as exc:                     # server hiccup: retry
+                log(f"imd: {y} error {type(exc).__name__}: {exc}")
+            f = year_file(imd_dir, y)
+            if f.exists() and f.stat().st_size > 1_000_000:
+                break
+            if f.exists():
+                f.unlink()                               # truncated file: remove and retry
+            time.sleep(wait_s)
+        else:
+            failed.append(y)
+    if failed:
+        log(f"imd: WARNING years still missing after {attempts} attempts: {failed}")
+    return failed
 
 
 def clean(da: xr.DataArray) -> xr.DataArray:

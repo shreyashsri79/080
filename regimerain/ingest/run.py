@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 PARTS = ("tracks", "mjo", "imd", "hres")
+MIN_CLIM_YEARS = 25
 
 
 def run_ingest(cfg: dict, years: list[int], truth: str | None = None, only: list[str] | None = None,
@@ -42,7 +43,9 @@ def run_ingest(cfg: dict, years: list[int], truth: str | None = None, only: list
         if truth != "imd":
             raise NotImplementedError("CHIRPS truth ingest not built yet (MODEL_SPEC 4.4)")
         from regimerain.ingest import imd
-        imd.download(cfg["paths"]["imd"], years, log=log)
+        failed = imd.download(cfg["paths"]["imd"], years, log=log)
+        if failed:
+            raise RuntimeError(f"IMD download failed for season years {failed}; rerun `ingest --only imd`")
         done["imd"] = cfg["paths"]["imd"]
 
     if "hres" in parts:
@@ -55,4 +58,7 @@ def run_ingest(cfg: dict, years: list[int], truth: str | None = None, only: list
 
 def run_imd_climatology(cfg: dict, start: int, end: int, log=print) -> None:
     from regimerain.ingest import imd
-    imd.download(cfg["paths"]["imd"], range(start, end + 1), log=log)
+    failed = imd.download(cfg["paths"]["imd"], range(start, end + 1), log=log)
+    if failed:
+        log(f"imd climatology: {len(failed)} year(s) missing {failed}; labels will use the remaining years "
+            f"(allowed while at least {MIN_CLIM_YEARS} years are present)")
