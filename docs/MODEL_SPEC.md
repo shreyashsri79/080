@@ -1611,7 +1611,7 @@ flowchart LR
 
 ### 18.2 GFS precipitation
 
-GFS APCP is stored in accumulation windows whose layout (continuous since init vs 6-hour buckets) must be checked with `inventory()` (**VERIFY**). This helper handles both:
+**Confirmed in Phase 0 (run of 29 Sep 2026 on the GFS 28 Sep 00 UTC cycle, `docs/PHASE0_FINDINGS.md`):** every GFS file carries a **running total from init** (`0-{fxx} hour acc`) as well as the 3/6-hour bucket. At f003 and f006 the bucket *is* the running total, so the same message appears twice and the helper must take just one. Rain-day totals are therefore one difference of two running totals. The bucket fallback is kept in case NOAA changes the layout.
 
 ```python
 # regimerain/ingest/gfs.py
@@ -1624,6 +1624,8 @@ BOX = dict(latitude=slice(38.5, 6.5), longitude=slice(66.5, 100.0))    # GFS lat
 def _apcp(init: str, fxx: int, window: str):
     H = Herbie(init, model="gfs", product="pgrb2.0p25", fxx=fxx)
     ds = H.xarray(f":APCP:surface:{window} hour acc", remove_grib=True)
+    if isinstance(ds, list):                                           # duplicate messages at f003/f006
+        ds = ds[0]
     return ds["tp"].sel(**BOX).load()                                  # kg m-2 == mm
 
 def cumulative(init: str, h: int):
