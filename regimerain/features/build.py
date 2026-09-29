@@ -94,6 +94,9 @@ def build_season_lead(cfg: dict, year: int, lead: int, static: xr.Dataset, log=p
     truth = load_truth(cfg, [year])
     rmm = _rmm(cfg)
     days = set(jjas_days(year))
+    cb = cfg["labels"]["cmz_box"]
+    LATg, LONg = np.meshgrid(lat_r, lon_r, indexing="ij")
+    cmz = land & (LATg >= cb[0]) & (LATg <= cb[1]) & (LONg >= cb[2]) & (LONg <= cb[3])
     fcfg = cfg["features"]
     frames = []
     for i, init in enumerate(pd.DatetimeIndex(rain.init.values)):
@@ -101,7 +104,10 @@ def build_season_lead(cfg: dict, year: int, lead: int, static: xr.Dataset, log=p
         if valid not in days:
             continue
         d = {k: dz[k].isel(init=i).values.astype("float64") for k in ("u850", "v850", "mslp", "w500", "pw", "ivtx", "ivty")}
-        g = grids_for_init(rain.isel(init=i).values.astype("float64"), d, latd, lond, lat_r, lon_r, fcfg)
+        rain2d = rain.isel(init=i).values.astype("float64")
+        g = grids_for_init(rain2d, d, latd, lond, lat_r, lon_r, fcfg)
+        g["f_cmz_rain"] = float(np.nanmean(rain2d[cmz])) if cmz.any() else 0.0
+        g["f_cmz_wetfrac"] = float(np.mean(rain2d[cmz] >= 2.5)) if cmz.any() else 0.0
         row = {"lat_idx": iy.astype("int16"), "lon_idx": ix.astype("int16"),
                "lat": lat_r[iy].astype("float32"), "lon": lon_r[ix].astype("float32")}
         for k, a in g.items():

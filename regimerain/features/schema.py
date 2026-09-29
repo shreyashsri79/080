@@ -9,6 +9,7 @@ FORECAST = [
     "f_rain", "f_rain_nbr3_mean", "f_rain_nbr3_max", "f_rain_nbr5_mean", "f_rain_nbr5_max",
     "f_u850", "f_v850", "f_ws850", "f_llj_index", "f_trough_lat", "f_bob_vort_max",
     "f_vort850_max500km", "f_dist_mslp_min_km", "f_mslp_anom", "f_pw", "f_ivt", "f_imfc", "f_w500",
+    "f_cmz_rain", "f_cmz_wetfrac",          # forecast's own core-monsoon-zone rain: direct active/break signal
 ]
 OTHER = ["mjo_rmm1", "mjo_rmm2", "mjo_amp", "mjo_phase", "doy_sin", "doy_cos", "lead"]
 BASE_FEATURES = STATIC + FORECAST + OTHER
