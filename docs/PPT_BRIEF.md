@@ -1,78 +1,247 @@
-# PPT brief — Regime-Aware Rainfall Post-Processing (SIH26080)
+# PPT brief — SIH26080 idea-submission deck
 
-For whoever builds the slide deck. Everything here is sourced from `../PRD.md` and `../TECHNICAL_SPEC.md` — read those for the full reasoning; this is the distilled, deck-ready version. Do not invent a number that isn't in this document or in a `runs/<run_id>/verification_report.json` once the build exists.
+Slide-by-slide content for the team building the PPT. Follows the official `templates-and-examples/SIH2026-IDEA-Presentation-Format.pptx` and copies the layout patterns of `templates-and-examples/sih_winning.pdf` (Visioncraft, PS 25159).
 
-## The one line
+Facts come from `../PRD.md` and `../TECHNICAL_SPEC.md`. Nothing is built yet, so **no measured results exist**. Every number below is a definition, threshold or design target from those two files. Do not add a skill score, "% improvement" or latency figure.
 
-**Most bias-correction systems fit one curve to every day of the year. We fit one curve per weather regime, predict the regime from the forecast itself, and only then correct — so the correction sharpens on the events that cost the most: heavy and very heavy rainfall.**
+**Graphics:** Mermaid sources for every diagram are in `PPT_DIAGRAMS.md`. Render them at https://mermaid.live and restyle in the deck. The flow diagram on slide 3 is the reference for the main graphic.
 
-## Why this problem statement, in one breath
+## Submission rules (from the template's last slide)
 
-MoES/NCMRWF wrote a PS that names its own scorecard — RMSE, ETS, CSI, POD, FAR, FSS. That's rare among the 240 statements on the portal. It tells you exactly what the judges (atmospheric scientists) will ask for: real skill numbers against a named baseline, not a dashboard on made-up data. This is the PS where showing up with six real metrics, honestly reported, beats a flashier idea with no verification behind it.
+- Maximum **6 slides including the title slide**. Delete the "Important Pointers" slide.
+- Use the provided template. Keep its heading pointers unchanged.
+- Points, diagrams and pictures. No paragraphs. Short, precise lines.
+- Export to **PDF** and upload the PDF. No PPTX.
+- Team name, logo oval (top-left) and blue footer bar carry over on slides 2 to 6, as in the winning deck.
 
-## The problem, for a slide with no jargon
+## What the winning deck did (copy these patterns)
 
-Weather forecasts for rainfall are wrong in different ways on different kinds of days:
-- During an **active monsoon spell**, the model errs one way.
-- During a **break spell** (rainfall dries up), it errs another way.
-- During a **depression** (a tracked low-pressure storm system), it badly under- or mis-places heavy rain.
-- Near mountains (**orographic** rain, e.g. Western Ghats) and near the **coast**, the model has its own standing blind spots.
+| Slide | Winning-deck pattern |
+|---|---|
+| 1 Title | Bullet list of six fields, big SIH logo graphic on right |
+| 2 Solution | Five rounded grey-lilac "pill" boxes, key phrases in **red**, icon-hub infographic (centre shield + 6 labelled icons) on the right |
+| 3 Technical approach | Left column: numbered tech stack + logos + prototype/video links. Right: one big flow diagram with decision branches and a feedback loop |
+| 4 Feasibility | Three-column coloured table (cyan / red / pink), then three bold-lead bullets |
+| 5 Impact | Two rounded panels (pink left, cyan right), numbered headings in green with two sub-bullets each, three small visuals along the bottom |
+| 6 Research | Conventional-vs-proposed table, then numbered references and dataset links |
 
-Today's forecast correction tools apply one fix, everywhere, all the time — which means it's never quite right for the day that matters most. We tell the system what kind of day it's forecasting *first*, then apply the fix built for that kind of day.
+Colour convention: black body text, **red** for the key claim phrases, green for numbered sub-headings on slide 5.
 
-## The three claims (deck spine — one slide each)
+---
 
-1. **Classify before you correct.** A single global bias-correction curve washes out exactly the structure — regime differences — that determines whether a correction helps or hurts. We predict the regime from forecast-time information only (so it works operationally, not just in hindsight), then apply a correction fitted specifically to that regime.
-2. **We report the scorecard the problem statement asked for, not the one that flatters us.** RMSE, ETS, CSI, POD, FAR, FSS — all six, for both the raw forecast and our corrected output, under a leave-one-monsoon-out test (the only split that doesn't let one season's rainfall leak into its own training data). Where correction doesn't help, the report says so.
-3. **The output is a district table an official can act on**, not just a scientist's plot — corrected rainfall and a heavy-rain probability, per district, on a map.
+## Slide 1 — Title page
 
-## What NOT to oversell
+Title: SMART INDIA HACKATHON 2026 (use template graphic)
 
-This is, by the team's own admission, the least novel of the candidates that were shortlisted (see `../../extra/problem-statements/SLOT2_CANDIDATES.md` §1: "least novel of the top three: bias correction by regime is a known idea"). Regime-conditioned bias correction is a known technique in the meteorology literature. **The win is rigour, not invention.** Do not write a slide that claims a "novel AI breakthrough." Write one that says: most teams will not build all six named metrics under a leaky-proof split, and we did.
+- Problem Statement ID: **SIH26080**
+- Problem Statement Title: **Regime-Aware AI Post-Processing of Monsoon Rainfall Forecasts**
+- Theme: **Smart Automation**
+- PS Category: **Software**
+- Team ID: *(fill from portal)*
+- Team Name: *(as registered on portal)*
 
-Typical bias-correction skill gains are small — a few percent in RMSE, not a dramatic before/after. **Do not headline a big number that isn't real.** Lean the pitch on:
-- the regime-conditioning story (a judge can ask "what regime is today?" and get a real, falsifiable answer),
-- the FSS and reliability-diagram results (reward near-right forecasts, which is the honest way to show skill on rare heavy-rain events),
-- and an explicit "here's where it didn't help" moment — that is what separates a credible team from one presenting cherry-picked numbers.
+Organisation line, small, if space allows: Ministry of Earth Sciences (MoES), NCMRWF.
 
-## Data credibility slide — what to say when asked "where's your data from"
+---
 
-| Claim | Source | Say this |
+## Slide 2 — Proposed solution
+
+**Slide title (top, centred):** RegimeRain: Classify the Weather Regime First, Then Correct the Rainfall
+**Sub-heading (template):** Proposed Solution (Describe your Idea/Solution/Prototype)
+
+### Left: five pill boxes (red = highlighted phrase)
+
+1. Raw NWP rainfall forecasts err **differently on different days**: active monsoon, break spell, depression, orographic and coastal rain. **One global bias-correction curve** averages that structure away.
+2. Our system first **predicts the weather regime** from forecast-time inputs only (forecast rainfall, 850 hPa wind, moisture flux convergence, MJO phase, terrain masks), so it is **deployable, not a hindsight label**.
+3. It then applies **a bias correction fitted to that regime** (per-regime empirical quantile mapping) with a **tail rule that keeps heavy-rain values** instead of clipping them.
+4. A **calibrated exceedance model** gives the probability of **heavy (≥64.5 mm/day)** and **very-heavy (≥124.5 mm/day)** rainfall, the IMD operational thresholds.
+5. Output is a **district-level table and map** an officer can act on, plus a **verification report with all six metrics the PS names: RMSE, ETS, CSI, POD, FAR, FSS**, raw vs corrected, under **leave-one-monsoon-out** testing.
+
+### Right: icon-hub infographic
+
+Centre icon: India map with rain cloud. Six icons around it, each with a two-line label:
+
+| Position | Label |
+|---|---|
+| Top-left | Regime Classifier (active / break / depression / coastal / orographic) |
+| Top-right | Per-Regime Bias Correction |
+| Mid-left | Heavy-Rain Probability (calibrated) |
+| Mid-right | District Table and Map |
+| Bottom-left | Six-Metric Verification Report |
+| Bottom-right | Forecast-Time Inputs Only (no leakage) |
+
+### "Innovation and uniqueness" strip (template pointer, one line under the pills or as a 6th slim pill)
+
+**Uniqueness = rigour, not a new algorithm:** classify-then-correct, all six PS metrics, a leakage-proof split, and reported failure cases. State it this way. Do not write "novel AI breakthrough".
+
+---
+
+## Slide 3 — Technical approach
+
+**Slide title:** TECHNICAL APPROACH
+
+### Left column: Techstack used
+
+1. Python (xarray, zarr, NumPy)
+2. LightGBM (regime classifier + exceedance models)
+3. scikit-learn (isotonic calibration, metrics)
+4. Empirical quantile mapping (custom, per regime per season)
+5. GeoPandas (district area-weighted aggregation)
+6. FastAPI (serves run artefacts)
+7. MapLibre GL (district map + scorecard)
+8. Open data: WeatherBench2 (ERA5, IFS HRES), CHIRPS 2.0, IBTrACS, MJO RMM, NOAA GFS
+
+Logos row (as in winning deck): Python, LightGBM, scikit-learn, FastAPI, MapLibre.
+
+Below the stack, template-style lines:
+- **Prototype:** *(link, only if one exists by submission; otherwise delete the line)*
+- **Prototype video link:** *(same rule)*
+
+### Right: flow diagram (draw as boxes and arrows, like the winning deck)
+
+Top row, left to right:
+
+1. **Inputs**: forecast (IFS HRES / NOAA GFS), ERA5, CHIRPS, IBTrACS, MJO RMM, terrain + coast masks
+2. **Ingestion**: clip to India box (6–38°N, 68–98°E), 0.25° grid, mm/day, UTC day
+3. **Regime labelling** *(offline, training only)*: active/break rainfall-anomaly index (±1σ, ≥3 days), depression flag from IBTrACS, static coastal/orographic masks. Precedence: depression > orographic > coastal > active/break > other
+
+Middle: **Regime classifier** (multi-class LightGBM, forecast-time features only) outputs a **probability per regime**. A rule override keeps the static coastal/orographic masks.
+
+The classifier output splits into two parallel branches:
+
+- **Branch A: Per-regime quantile mapping.** Fit one curve per regime per season. Top-decile ratio extrapolation for values above the training range. Output: **corrected rainfall grid**.
+- **Branch B: Exceedance model.** Two GBM classifiers (heavy, very-heavy), isotonic calibration. Output: **P(heavy), P(very-heavy) grid**.
+
+Both branches join, then:
+
+- **District aggregation.** Area-weighted mean **and** max per district (mean can hide a local heavy cell). Output: **district table + choropleth map**.
+- **Verification module.** RMSE, ETS, CSI, POD, FAR, FSS (25 km and 50 km) for **raw vs corrected**, at both thresholds, plus reliability diagram. Output: **verification report**.
+
+Feedback loop (mirror the winning deck's "continuous learning" loop box):
+**Verification report → weak regimes / low-sample regimes flagged → refit curves and classifier → re-verify.**
+
+Add a small labelled bracket around the flow: "Leave-one-monsoon-out CV: each June–September season held out whole, so no season leaks into its own training."
+
+---
+
+## Slide 4 — Feasibility and viability
+
+**Slide title:** FEASIBILITY AND VIABILITY
+
+Table, three columns exactly as the winning deck (cyan | red | pink):
+
+| Analysis of the feasibility of the idea | Potential challenges and risks | Strategies for overcoming these challenges |
 |---|---|---|
-| Raw forecast being corrected | ECMWF HRES via WeatherBench2 (public zarr) | "A real operational-grade global forecast, not a toy dataset." |
-| Ground truth for verification | CHIRPS 2.0, 5 km daily, satellite+gauge blended | "The same product used in operational rainfall verification research; upgrading to IMD gridded rainfall if reachable." |
-| Depression tracking | IBTrACS (WMO-affiliated best-track archive) | "The standard historical record for tropical/monsoon low-pressure systems." |
-| MJO index | BOM/NOAA RMM index | "The standard intraseasonal oscillation index used operationally by forecasters worldwide." |
-| Live demo forecast | NOAA GFS open data (AWS) | "Today's actual forecast, pulled live, not pre-recorded." |
+| **Technical: Achievable** | Rare regimes (e.g. depression) have few historical days, so the quantile curve is noisy | Tabular-scale **LightGBM + empirical quantile mapping** (trains in minutes, no GPU). **Report the sample count behind every regime curve**. Blend the top-2 regimes near transitions if time allows |
+| **Data: Available and open** | NCMRWF's NCUM/NEPS-G output is not public. IMD gridded rainfall may not be reachable | Validate on **open IFS HRES + ERA5 with CHIRPS truth**. Provide an **adapter interface for NCUM**. IMD gridded rainfall is a drop-in truth upgrade if reachable, not a dependency |
+| **Accuracy: Verifiable** | Bias-correction gains are typically small. Regime labels can leak hindsight into a forecast-time model | **Leave-one-monsoon-out CV**. A **unit test rejects any truth-derived feature**. All six metrics reported, **including where correction does not help** |
+| **Operational: Practical** | District-boundary licence. Pipeline must run quickly for daily use | Use **GADM** boundaries with attribution (licence checked). **No retraining in daily mode**: load fitted models, run correction, aggregation and verification only |
 
-**What we don't have, and say plainly:** NCMRWF's own operational model output (NCUM/NEPS-G) is not public. We validate against open models and describe an adapter for NCUM rather than pretending to have run on it.
+Bottom text, same style as the winning deck:
 
-## Demo script (for the live segment)
+Given that feasibility and viability are our top priority, we will keep everything:
 
-1. Show today's date, pull the live GFS/HRES forecast for India on stage.
-2. Show the regime map: "here's what the model thinks is happening today — active monsoon over X, a depression flagged near Y."
-3. Toggle raw vs corrected rainfall on the map.
-4. Toggle to the heavy-rain exceedance layer; click a district; show the table row.
-5. Show the scorecard panel: six metrics, baseline vs corrected, from a real historical backtest — not from today's single run (today's run has no truth yet to score against; say this explicitly if asked).
+- **Technically viable:** proven, open-source tools (LightGBM, xarray, FastAPI), no deep model, no GPU.
+- **Economically feasible:** 100% open data, runs on a laptop or a small cloud VM.
+- **Operationally practical:** one pipeline, fixed seeds and hashed models, every output traceable to a run artefact, district table a disaster-management officer can read.
 
-## Judging-criteria mapping (for a "why should this place" slide if wanted)
+---
 
-- **Technical depth:** regime classifier + per-regime quantile mapping + calibrated exceedance model — three real, connected ML components, not one model doing everything.
-- **Rigour:** the PS's own six-metric scorecard, computed under leave-one-monsoon-out CV, against a named baseline.
-- **Usability:** district-level table/map output — the stated downstream user (a district disaster-management officer) can read a number and act.
-- **Honesty:** disclosed limitations (small gains typical of bias correction, sparse-regime noise, no NCUM access) presented up front, not extracted under questioning.
+## Slide 5 — Impact and benefits
 
-## Design direction for the slides and any live UI
+**Slide title:** IMPACT AND BENEFITS
 
-Reuse the **Field Atlas** visual language established for SatQuery (PS26167): light theme throughout, map/globe-first hero framing, no dark dashboard chrome. Not the editorial/"Zara" look — this is an operational tool for forecasters and district officials, and the deck should read that way: clean, data-forward, credible, not stylised. If the live demo reuses SatQuery's MapLibre frontend scaffolding (`../167/`), keep the same colour system so the deck and the demo don't visually clash.
+Keep all claims qualitative. No invented percentages. Wording is "expected" or "supports", never "achieves".
 
-## Team / roles slide
+### Left panel (pink): Potential impact on target audience
 
-- PS26080 (this one) — built by the team excluding Mridul, who is building PS26081 (Hybrid AI–NWP forecast blending) in parallel. Both share the same India-domain open-data pipeline (WeatherBench2, CHIRPS) but are independent builds and independent PS submissions — don't conflate them on a slide, they answer different PS numbers.
-- If asked why two weather PS at once: both were selected from the same live-submission-count ranking exercise (`../../extra/problem-statements/SLOT2_CANDIDATES.md`) after the team's original slot 1 (SatQuery/PS26167) and slot 2 (Dark Transit/PS26143) both closed to new registration.
+1. **NCMRWF / IMD forecasters**
+   - See which regime was predicted and which correction was applied, so every change is auditable.
+   - Get skill against raw NWP on the six metrics they already use.
+2. **District disaster-management officers**
+   - Read corrected rainfall and heavy-rain probability per district in mm/day.
+   - Mean and max per district show localised heavy cells.
+3. **State agencies (water, flood, agriculture, urban)**
+   - Better-targeted heavy and very-heavy rainfall guidance at district scale.
+4. **Model developers and researchers**
+   - Per-regime error curves show where NWP fails, feeding model improvement.
+5. **Scientific reviewers**
+   - Leakage-proof split and reported failure cases make the results trustworthy.
 
-## What's still open (don't promise these on a slide until resolved)
+### Right panel (cyan): Benefits of the solution
 
-- Whether IMD gridded rainfall (better truth than CHIRPS) is reachable from the team's network — if not confirmed by build day, the deck should say CHIRPS throughout, not IMD.
-- Exact district-boundary source/licence for the map — resolve before showing a district map with an uncleared data source's watermark or terms.
-- Whether the probability-weighted regime blend (PRD §10.2b) makes it into the build, or the simpler single-regime version is what's shown — say only what actually shipped.
+1. **Social**
+   - Earlier, sharper warning of heavy rain for at-risk districts.
+   - Clear probability, not just a rainfall number, supports evacuation and response decisions.
+2. **Economic**
+   - Fewer losses from missed heavy-rain events and from false alarms.
+   - Zero data cost: all inputs are open.
+3. **Environmental**
+   - Runs on tabular models on a laptop, so low compute and energy.
+   - Better flood and landslide preparedness in orographic and coastal belts.
+4. **Technological**
+   - Reusable classify-then-correct pipeline for any NWP model.
+   - Reproducible runs (fixed seed, hashed models, manifest file).
+5. **Strategic**
+   - Supports MoES/NCMRWF post-processing goals with an NCUM-ready adapter.
+   - Open methods that can be extended to other regions and seasons.
+
+### Bottom row: three visuals (like the winning deck's chart, pie and image)
+
+1. **Conceptual chart, labelled "Illustrative, not measured":** two quantile-mapping curves. One flat grey line "single global curve", and three coloured lines "active / break / depression". Shows why one curve mis-corrects.
+2. **IMD threshold ladder:** vertical bar with two marks, **Heavy ≥ 64.5 mm/day** and **Very heavy ≥ 124.5 mm/day**. Caption: "The events our exceedance probability targets."
+3. **District product mockup:** small India map with a few district polygons shaded by heavy-rain probability and one table row (`district | corrected mean | corrected max | P(heavy) | P(very heavy)`). Use placeholders or clearly dummy shading. Caption: "Output format".
+
+---
+
+## Slide 6 — Research and references
+
+**Slide title:** RESEARCH AND REFERENCES
+
+### Research survey table (cyan, three columns: Aspect | Conventional systems | Proposed system)
+
+| Aspect | Conventional systems | Proposed system |
+|---|---|---|
+| Correction | One global curve or scaling factor for all days | One curve **per weather regime** |
+| Regime awareness | None | **Classify first**, then correct |
+| Regime inputs | Hindsight labels | **Forecast-time features only** |
+| Heavy rain | Mean bias focus, tails clipped | **Tail extrapolation + calibrated P(heavy)** |
+| Verification | Often RMSE alone | **RMSE, ETS, CSI, POD, FAR, FSS**, leave-one-monsoon-out |
+| Output | Gridded file | **District table + map** |
+| Reporting | Best-case results | **Failure cases stated** |
+
+### Reference: research papers
+
+Check every citation and URL against the source before you export. Do not submit one you have not opened.
+
+1. Wheeler, M. C. and Hendon, H. H., "An All-Season Real-Time Multivariate MJO Index," *Monthly Weather Review* 132 (2004).
+2. Rajeevan, M., Gadgil, S., Bhate, J., "Active and break spells of the Indian summer monsoon," *J. Earth System Science* 119 (2010).
+3. Themeßl, M. J., Gobiet, A., Leuprecht, A., "Empirical-statistical downscaling and error correction of daily precipitation from regional climate models," *Int. J. Climatology* 31 (2011).
+4. Roberts, N. M. and Lean, H. W., "Scale-selective verification of rainfall accumulations from high-resolution forecasts of convective events," *Monthly Weather Review* 136 (2008). *(Origin of FSS)*
+5. Funk, C. et al., "The climate hazards infrared precipitation with stations (CHIRPS)," *Scientific Data* 2 (2015).
+6. Rasp, S. et al., "WeatherBench 2: A benchmark for the next generation of data-driven global weather models," *J. Advances in Modeling Earth Systems* (2024).
+7. Ke, G. et al., "LightGBM: A Highly Efficient Gradient Boosting Decision Tree," *NeurIPS* (2017).
+
+### Dataset links (three-across row, as in the winning deck)
+
+- [1] WeatherBench2 (ERA5, IFS HRES): https://sites.research.google/weatherbench/
+- [2] CHIRPS 2.0 rainfall truth: https://www.chc.ucsb.edu/data/chirps
+- [3] IBTrACS depression tracks: https://www.ncei.noaa.gov/products/international-best-track-archive
+- [4] BoM MJO RMM index: http://www.bom.gov.au/climate/mjo/
+- [5] NOAA GFS open data (AWS): https://registry.opendata.aws/noaa-gfs-bdp-pds/
+- [6] GADM district boundaries: https://gadm.org
+
+Six links do not fit in one row: use two rows of three.
+
+---
+
+## Hard rules for whoever builds the deck
+
+1. **No invented numbers.** Allowed: 64.5 and 124.5 mm/day, 0.25°, 5 km, six metric names, 25/50 km FSS radii, ±1σ, ≥3 days. Anything else needs a source in `../PRD.md` or `../TECHNICAL_SPEC.md`.
+2. **Do not write** "novel", "breakthrough", or any improvement percentage. The claim is rigour: six metrics, leakage-proof split, failure cases reported.
+3. **Say CHIRPS, not IMD**, for truth. IMD gridded rainfall is unconfirmed.
+4. **Say we validate on open models** (IFS HRES, ERA5). Do not imply NCUM/NEPS-G was used.
+5. Say "probability-weighted regime blend" only if it is a stated stretch goal, never as a shipped feature.
+6. No live-demo content, team-planning notes, or references to other PS numbers on any slide.
+7. Keep the winning deck's density: max about 5 pills or 5 numbered groups per slide, one line each where possible.
+8. Export PDF, check it is at most 6 pages, and that the "Important Pointers" slide is gone.

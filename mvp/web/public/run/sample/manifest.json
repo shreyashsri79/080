@@ -1,0 +1,63 @@
+{
+  "synthetic": true,
+  "run_id": "sample",
+  "forecast_issue_date": "2022-07-14",
+  "forecast_source": "sample (not real)",
+  "truth_source": "sample (not real)",
+  "grid_step_deg": 0.5,
+  "unit": "mm/day",
+  "thresholds_mm": {
+    "heavy": 64.5,
+    "very_heavy": 124.5
+  },
+  "fss_radii_km": [
+    25,
+    50
+  ],
+  "regime_days": {
+    "active": 612,
+    "break": 388,
+    "depression": 141,
+    "coastal": 1804,
+    "orographic": 1377,
+    "other": 2461
+  },
+  "depression_track": [
+    {
+      "lead": 0,
+      "lat": 20.0,
+      "lon": 87.6
+    },
+    {
+      "lead": 1,
+      "lat": 20.9,
+      "lon": 85.1
+    },
+    {
+      "lead": 2,
+      "lat": 21.8,
+      "lon": 82.6
+    },
+    {
+      "lead": 3,
+      "lat": 22.7,
+      "lon": 80.1
+    },
+    {
+      "lead": 4,
+      "lat": 23.6,
+      "lon": 77.6
+    }
+  ],
+  "wettest": {
+    "lead": 4,
+    "valid_date": "2022-07-19",
+    "lat": 22.75,
+    "lon": 77.25,
+    "raw_mm": 107.9,
+    "corrected_mm": 155.2,
+    "p_heavy": 1.0,
+    "p_very_heavy": 0.91,
+    "regime": "depression"
+  }
+}
