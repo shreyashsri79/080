@@ -11,12 +11,16 @@ Rainfall forecast errors are not uniform: they behave differently in active mons
 
 ```
 PRD.md                    product requirements — what and why (§1-20)
-TECHNICAL_SPEC.md         engineering spec — data contracts, modules, CLI, tests
+TECHNICAL_SPEC.md         TRD — grids, data contracts, modules, CLI, API, tests
 docs/PS26080_Brief.md     the original problem-statement text, verbatim
 docs/PPT_BRIEF.md         deck-ready narrative, claims, demo script, for the PPT team
+docs/SOLUTION_EXPLAINED_80.md  full idea explainer: problem → solution → every model, with flowcharts
+docs/MODEL_SPEC.md        model build guide: every model step by step, with code, config and tests (§23 = Colab, §24 = Kaggle)
+notebooks/colab_pipeline.ipynb   Colab CPU notebook (primary): STAGE = data | backtest (resumable folds) | final
+notebooks/kaggle_pipeline.ipynb  Kaggle alternative, same stages
 ```
 
-No MVP exists yet at time of writing (29 Sep 2026) — this is the pre-build planning set. `PRD.md` §18 has the build-phase order; `TECHNICAL_SPEC.md` §7 has the proposed CLI once a `regimerain` package exists, mirroring `../143/`'s structure.
+No MVP exists yet at time of writing (29 Sep 2026) — this is the pre-build planning set. `PRD.md` §18 has the build-phase order; `TECHNICAL_SPEC.md` §9 has the proposed CLI, `docs/MODEL_SPEC.md` §22 the model build checklist once a `regimerain` package exists, mirroring `../143/`'s structure.
 
 ## Status
 
