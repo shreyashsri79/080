@@ -74,7 +74,7 @@ def test_synthetic_is_derived_from_kind(fields, cfg):
     files = build_files(replace(fields, kind="replay", provenance={"backtest_id": "20260930_abcdef12"}), cfg,
                         report=mock_report(cfg))
     assert all(getattr(m, "synthetic") is False for m in files.values())
-    assert files["manifest"].run_id.endswith("_replay-20260930")
+    assert files["manifest"].run_id.endswith("_replay-20260930_abcdef12")
 
 
 def test_producers_never_import_mock():
@@ -131,10 +131,8 @@ def test_cli_run_mock(tmp_path, capsys):
     assert "OK: web contract v2" in capsys.readouterr().out
 
 
-def test_cli_unbuilt_sources_exit_2():
-    with pytest.raises(SystemExit) as e:
-        cli.main(["run", "--source", "gfs"])
-    assert e.value.code == 2
+def test_cli_gfs_without_cache_or_model_fails_cleanly(tmp_path):
+    assert cli.main(["run", "--source", "gfs", "--init", "cached", "--data-root", str(tmp_path)]) == 1
 
 
 def test_web_types_cover_the_contract(tmp_path):

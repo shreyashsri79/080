@@ -25,9 +25,16 @@ KM_PER_DEG = 111.2
 METRICS = ("rmse", "ets", "csi", "pod", "far")
 
 
+def _track_where_depression(f: RunFields) -> list[dict]:
+    """The MSLP-low track, kept only at leads whose regime field has depression cells: on active, break or
+    normal days the deepest low is the monsoon trough, and drawing it as a depression track would mislead."""
+    dep = f.p_synoptic.argmax(-1) == SYNOPTIC.index("depression")
+    return [t for t in depression_track(f) if (dep[t["lead"]] & f.land).any()]
+
+
 def make_run_id(f: RunFields) -> str:
     """TRD 3.5: {init}T00Z_{source}_{model_set_id[:8]}."""
-    tag = {"mock": "mock", "replay": f"replay-{(f.provenance.get('backtest_id') or 'x')[:8]}"}.get(
+    tag = {"mock": "mock", "replay": f"replay-{f.provenance.get('backtest_id') or 'x'}", "interim": "interim"}.get(
         f.kind, (f.provenance.get("model_set_id") or "model")[:8])
     return f"{f.init:%Y%m%d}T00Z_{f.source}_{tag}"
 
@@ -162,10 +169,11 @@ def build_files(f: RunFields, cfg: dict, report: dict | None = None, curves: lis
     manifest = C.Manifest(
         synthetic=syn, kind=f.kind, run_id=run_id, created_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         forecast_issue_date=f.init.isoformat(),
-        forecast_source={"mock": "synthetic sample (not real)", "hres": "ECMWF IFS HRES (WeatherBench2)", "gfs": "NCEP GFS 0.25"}.get(f.source, f.source),
+        forecast_source={"mock": "synthetic sample (not real)", "hres": "ECMWF IFS HRES (WeatherBench2)", "gfs": "NCEP GFS 0.25",
+                         "samanvay-hres": "ECMWF IFS HRES (via Samanvay, 1.5°, regridded to 0.25°)"}.get(f.source, f.source),
         truth_source=truth_source if not syn else None, grid_step_deg=step, thresholds_mm=thresholds,
         synoptic=list(SYNOPTIC), geo_classes=list(GEO), layers=f.layers(), regime_days=regime_days,
-        depression_track=depression_track(f), wettest=wettest(f), provenance=prov)
+        depression_track=_track_where_depression(f), wettest=wettest(f), provenance=prov)
 
     files = {"manifest": manifest, "grid": grid,
              "places": C.Places(synthetic=syn, places=place_values(f, curves, regime_days))}
@@ -173,6 +181,7 @@ def build_files(f: RunFields, cfg: dict, report: dict | None = None, curves: lis
         files["qm_curves"] = C.QmCurves(synthetic=syn, curves=curves)
     if report:
         files["verification"] = C.Verification.model_validate(verification_from_report(report, thresholds, step, syn))
+    manifest.files = [f"{name}.json" for name in files]      # the web fetches only what exists (no 404s)
     return files
 
 

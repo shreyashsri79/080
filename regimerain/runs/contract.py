@@ -21,7 +21,7 @@ FILES = ("manifest", "grid", "places", "qm_curves", "verification")
 Synoptic = Literal["active", "break", "depression", "normal"]
 GeoName = Literal["plains", "coastal", "orographic"]
 ThresholdName = Literal["heavy", "very_heavy"]
-Kind = Literal["mock", "replay", "model"]
+Kind = Literal["mock", "replay", "interim", "model"]   # interim: real forecast data, stand-in correction
 Layer = Literal["raw", "corrected", "corrected_global", "regime", "geo", "wind850", "p_heavy", "p_very_heavy", "truth"]
 
 Row = list[Optional[float]]          # one lead: nlat * nlon values, row-major, south to north, null off land
@@ -90,6 +90,7 @@ class Manifest(_Versioned):
     depression_track: list[TrackPoint] = []
     wettest: Wettest
     provenance: Provenance
+    files: Optional[list[str]] = Field(None, description="the files this export contains (optional ones are listed only if written)")
 
 
 # ------------------------------------------------------------------------------------ grid

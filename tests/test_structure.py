@@ -112,12 +112,6 @@ def test_cli_config_prints_hash(capsys):
     assert "config_sha256:" in capsys.readouterr().out
 
 
-def test_cli_unbuilt_command_exits_2():
-    with pytest.raises(SystemExit) as e:
-        cli.main(["fit-final"])
-    assert e.value.code == 2
-
-
 def test_cli_report_refuses_missing_folds(tmp_path):
     with pytest.raises(RuntimeError, match="not done"):
         cli.main(["report", "--data-root", str(tmp_path)])

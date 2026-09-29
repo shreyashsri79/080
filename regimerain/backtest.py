@@ -4,6 +4,9 @@ Per test season T writes cache/fold=T/:
     predictions.parquet   keys, o_rain, y_synoptic, raw/A/B rain, p_* regime probabilities
     classifier.json       test-season classifier metrics, temperature, best iteration
     qm_counts_A.csv, qm_counts_B.csv   expert sample counts and shrinkage weights
+    experts_A.parquet, experts_B.parquet   the fitted experts (ExpertSet.to_frame): lets a replay run
+                          show the curves actually used (docs/BACKEND_BUILD_PLAN.md B3)
+    model/                the fold's model set (regimerain.modelset layout) for the B4 parity test
     DONE                  config_sha256 + git commit (written last)
 """
 from __future__ import annotations
@@ -70,11 +73,19 @@ def run_fold(cfg: dict, fold: dict, variants, log=print) -> dict:
         EA = ExpertSet.from_config(qcfg).fit(tr, None)
         preds["A"] = EA.apply_global(te)
         EA.sample_counts().to_csv(out_dir / "qm_counts_A.csv", index=False)
+        EA.to_frame("A").to_parquet(out_dir / "experts_A.parquet", index=False)
     if "B" in variants:
         EB = ExpertSet.from_config(qcfg).fit(tr, "y_synoptic")
         preds["B"] = correct_mixture(te, P, EB, qcfg["p_min"], qcfg["p_hard"])
         EB.sample_counts().to_csv(out_dir / "qm_counts_B.csv", index=False)
+        EB.to_frame("B").to_parquet(out_dir / "experts_B.parquet", index=False)
     preds.to_parquet(out_dir / "predictions.parquet", index=False)
+    if "A" in variants and "B" in variants:
+        from regimerain.modelset import save_model_set
+        from regimerain.static.basic import static_path
+        save_model_set(out_dir / "model", cfg, clf, T, {"A": EA, "B": EB}, static_path(cfg),
+                       {"model_set_id": f"fold{fold['test']}", "kind": "fold", "fitted_on": fold["train"],
+                        "held_out_season": fold["test"], "git_commit": git_commit()})
     diag = {"test": fold["test"], "train": fold["train"], "inner_val": fold["inner_val"],
             "temperature": T, "best_iteration": int(clf.best_iteration or 0),
             "test_metrics": classifier_metrics(te.y_synoptic.to_numpy(), P),

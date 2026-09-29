@@ -12,7 +12,10 @@ from regimerain.runs.fields import RunFields, valid_date
 from regimerain.runs.places import PLACES
 
 # The box MODEL_SPEC section 7 searches for the MSLP minimum (f_dist_mslp_min_km).
-TRACK_BOX = (10.0, 30.0, 70.0, 95.0)          # lat0, lat1, lon0, lon1
+# lat0, lat1, lon0, lon1: Bay of Bengal and central India, where monsoon lows form and track. Kept clear of
+# the Himalayan edge: sea-level reduction over Tibet makes spurious lows against a 10-degree background
+# (seen on real HRES MSLP, 4 Aug 2020: a false low at 27 N 94.5 E beat the real 990 hPa one at 24 N 85.5 E).
+TRACK_BOX = (14.0, 26.0, 78.0, 93.0)
 TRACK_MIN_DEPTH_HPA = 3.0                     # a low must be this far below its 10-degree surroundings
 BACKGROUND_DEG = 10.0
 

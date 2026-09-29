@@ -79,8 +79,41 @@ def _rmm(cfg):
     return pd.read_parquet(p) if p.exists() else None
 
 
-def build_season_lead(cfg: dict, year: int, lead: int, static: xr.Dataset, log=print) -> pd.DataFrame:
+def rows_for_init(rain2d, d: dict, latd, lond, static: xr.Dataset, init, lead: int, rmm, fcfg: dict) -> pd.DataFrame:
+    """Forecast feature rows for one (init, lead) over the land cells, without truth or labels.
+
+    Shared by the season table (below) and live inference (regimerain.live), so a live forecast sees
+    exactly the features the models were trained on.
+    """
     from regimerain.ingest.mjo import value_on
+    lat_r, lon_r = static.lat.values, static.lon.values
+    land = static["land"].values.astype(bool)
+    iy, ix = np.nonzero(land)
+    init = pd.Timestamp(init)
+    valid = init.normalize() + pd.Timedelta(days=lead - 1)
+    g = grids_for_init(np.asarray(rain2d, "float64"), d, latd, lond, lat_r, lon_r, fcfg)
+    row = {"lat_idx": iy.astype("int16"), "lon_idx": ix.astype("int16"),
+           "lat": lat_r[iy].astype("float32"), "lon": lon_r[ix].astype("float32")}
+    for k, a in g.items():
+        row[k] = (np.asarray(a)[iy, ix] if np.ndim(a) == 2 else np.full(len(iy), a)).astype("float32")
+    for k in ("geo", "zone"):
+        row[k] = static[k].values[iy, ix].astype("int8")
+    for k in TERRAIN_VARS:
+        row[k] = static[k].values[iy, ix].astype("float32")
+    m = value_on(rmm, init) if rmm is not None else {"rmm1": 0.0, "rmm2": 0.0, "phase": 0, "amplitude": 0.0}
+    row.update(mjo_rmm1=np.float32(m["rmm1"]), mjo_rmm2=np.float32(m["rmm2"]),
+               mjo_amp=np.float32(m["amplitude"]), mjo_phase=np.int8(m["phase"]))
+    doy = valid.dayofyear
+    row.update(doy_sin=np.float32(np.sin(2 * np.pi * doy / 365.25)), doy_cos=np.float32(np.cos(2 * np.pi * doy / 365.25)))
+    df = pd.DataFrame(row)
+    df["init"], df["valid"] = init, valid
+    return df
+
+
+DYN_VARS = ("u850", "v850", "mslp", "w500", "pw", "ivtx", "ivty")
+
+
+def build_season_lead(cfg: dict, year: int, lead: int, static: xr.Dataset, log=print) -> pd.DataFrame:
     raw = Path(cfg["paths"]["raw"]) / "hres"
     rain = xr.open_zarr(raw / f"rain_{year}.zarr")["f_rain"].sel(lead=lead).load()
     dz = xr.open_zarr(raw / f"dyn_{year}.zarr").sel(lead=lead).load()
@@ -100,25 +133,10 @@ def build_season_lead(cfg: dict, year: int, lead: int, static: xr.Dataset, log=p
         valid = init.normalize() + pd.Timedelta(days=lead - 1)
         if valid not in days:
             continue
-        d = {k: dz[k].isel(init=i).values.astype("float64") for k in ("u850", "v850", "mslp", "w500", "pw", "ivtx", "ivty")}
-        g = grids_for_init(rain.isel(init=i).values.astype("float64"), d, latd, lond, lat_r, lon_r, fcfg)
-        row = {"lat_idx": iy.astype("int16"), "lon_idx": ix.astype("int16"),
-               "lat": lat_r[iy].astype("float32"), "lon": lon_r[ix].astype("float32")}
-        for k, a in g.items():
-            row[k] = (np.asarray(a)[iy, ix] if np.ndim(a) == 2 else np.full(len(iy), a)).astype("float32")
-        for k in ("geo", "zone"):
-            row[k] = static[k].values[iy, ix].astype("int8")
-        for k in TERRAIN_VARS:
-            row[k] = static[k].values[iy, ix].astype("float32")
-        m = value_on(rmm, init) if rmm is not None else {"rmm1": 0.0, "rmm2": 0.0, "phase": 0, "amplitude": 0.0}
-        row.update(mjo_rmm1=np.float32(m["rmm1"]), mjo_rmm2=np.float32(m["rmm2"]),
-                   mjo_amp=np.float32(m["amplitude"]), mjo_phase=np.int8(m["phase"]))
-        doy = valid.dayofyear
-        row.update(doy_sin=np.float32(np.sin(2 * np.pi * doy / 365.25)), doy_cos=np.float32(np.cos(2 * np.pi * doy / 365.25)))
-        row["o_rain"] = truth.sel(time=valid).values[iy, ix].astype("float32")
-        row["y_synoptic"] = labels["y_synoptic"].sel(time=valid).values[iy, ix].astype("int8")
-        df = pd.DataFrame(row)
-        df["init"], df["valid"] = init, valid
+        d = {k: dz[k].isel(init=i).values.astype("float64") for k in DYN_VARS}
+        df = rows_for_init(rain.isel(init=i).values, d, latd, lond, static, init, lead, rmm, fcfg)
+        df["o_rain"] = truth.sel(time=valid).values[iy, ix].astype("float32")
+        df["y_synoptic"] = labels["y_synoptic"].sel(time=valid).values[iy, ix].astype("int8")
         frames.append(df)
     out = pd.concat(frames, ignore_index=True)
     out = out[out.o_rain.notna()].reset_index(drop=True)

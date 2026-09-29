@@ -13,7 +13,7 @@ import numpy as np
 
 from regimerain.features.schema import GEO, SYNOPTIC
 
-Kind = Literal["mock", "replay", "model"]
+Kind = Literal["mock", "replay", "interim", "model"]
 
 
 def working_grid(cfg: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -39,7 +39,7 @@ def valid_date(init: date, lead: int) -> date:
 class RunFields:
     kind: Kind
     init: date
-    source: str                                   # "mock" | "hres" | "gfs"
+    source: str                                   # "mock" | "hres" | "gfs" | "samanvay-hres"
     lat: np.ndarray                               # (nlat,) ascending
     lon: np.ndarray                               # (nlon,)
     leads: list[int]                              # rain days, 1-based
