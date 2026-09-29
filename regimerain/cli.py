@@ -18,7 +18,6 @@ from regimerain.config import config_sha256, load_config
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PLANNED = {
-    "ingest": "MODEL_SPEC section 4 (HRES, IMD, CHIRPS, tracks, MJO)",
     "static": "MODEL_SPEC section 5 (DEM, coast, geo class, zones, district weights)",
     "label": "MODEL_SPEC section 6 (active/break, depression, synoptic labels)",
     "features": "MODEL_SPEC section 7 (feature tables)",
@@ -54,7 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("ingest", "download/prepare forecasts, truth, tracks, MJO")
     p.add_argument("--years", default=None)
     p.add_argument("--truth", choices=["imd", "chirps"], default=None)
-    p.add_argument("--imd-climatology", default=None)
+    p.add_argument("--imd-climatology", default=None, help="e.g. 1981-2015: only fetch IMD years for the climatology")
+    p.add_argument("--only", default=None, help="comma list of parts: tracks,mjo,imd,hres (default: all)")
+    p.add_argument("--force", action="store_true", help="redo parts that already exist")
     add("static", "static layers, zones, district weights")
     add("label", "synoptic regime labels")
     p = add("features", "feature tables")
@@ -101,12 +102,24 @@ def cmd_selftest(cfg: dict, args) -> int:
     return subprocess.call(cmd, cwd=REPO_ROOT)
 
 
+def cmd_ingest(cfg: dict, args) -> int:
+    from regimerain.ingest.run import run_imd_climatology, run_ingest
+    if args.imd_climatology:
+        a, b = parse_range(args.imd_climatology)[0], parse_range(args.imd_climatology)[-1]
+        run_imd_climatology(cfg, a, b)
+        return 0
+    years = parse_range(args.years) if args.years else list(cfg["seasons"])
+    only = [p.strip() for p in args.only.split(",")] if args.only else None
+    run_ingest(cfg, years, truth=args.truth, only=only, force=args.force)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = load_config(args.config, args.data_root)
     if getattr(args, "mode", None):
         cfg["mode"] = args.mode
-    handlers = {"config": cmd_config, "selftest": cmd_selftest}
+    handlers = {"config": cmd_config, "selftest": cmd_selftest, "ingest": cmd_ingest}
     if args.command == "report":
         from regimerain.folds import check_poolable
         check_poolable(cfg["paths"]["cache"], cfg["seasons"])

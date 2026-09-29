@@ -19,9 +19,17 @@ Results of `scripts/phase0_check.py` (docs/MODEL_SPEC.md section 3). Update this
 | **HRES** | FAIL, code bug | `prediction_timedelta` arrives as **int64 with a `units` attribute (hours)**, not timedelta64: recent xarray no longer decodes timedeltas by default. | Added `regimerain.ingest.align.lead_hours()` (handles both forms), used by `to_hours` and the script, plus a regression test. **Rerun.** |
 | **MJO RMM (BOM)** | FAIL | 403 on http and https, even with an explicit User-Agent. BOM blocks cloud-server addresses. | **Manual download**: save `rmm.74toRealtime.txt` in a browser, upload it to `MyDrive/ps26080/inputs/mjo/`, point `RMM_FILE` at it. The live demo needs a fresh copy the same way; if it is more than 3 days old, MJO features are set to neutral (MODEL_SPEC 18.2). |
 
+**Run 3: 29 Sep 2026, Google Colab, code at `bbab350`**
+
+| Check | Status | Finding | Consequence |
+|---|---|---|---|
+| **HRES** | PASS | Leads 0–240 h every 6 h (`prediction_timedelta` int64, units `hours`). `total_precipitation` is **accumulated from init, in metres**: starts at 0, never decreases, its 6-h differences match `total_precipitation_6hr` to 0.01%, and `total_precipitation_24hr` at 24 h equals tp(24) − tp(0). Central-India box mean on 15 Jul 2019, 0–24 h: 2.82 mm. | `sources.hres_precip_kind: cumulative` (reads `total_precipitation` directly). `regimerain/ingest/hres.py` written against these formats. |
+
 ## Still to check
 
-- [ ] HRES precipitation consistency (run 2 output: `precip_consistency`).
+- [x] HRES precipitation consistency (run 3).
+- [ ] HRES chunking (`hres_chunks` check): how much data an India-only read downloads.
+- [ ] One-season HRES ingest timing on Colab.
 - [ ] IMD download from Colab, and IMD's date convention (MODEL_SPEC 4.3; needs the forecast ingest first).
 - [ ] MJO from the manually downloaded file.
 - [ ] Monsoon LPS track dataset host (not scripted).

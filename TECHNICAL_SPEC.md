@@ -81,7 +81,7 @@ Rainfall mm/day (float32, ≥ 0). Winds m/s. Specific humidity kg/kg. Pressure P
 | File | Contents | Dims | Units |
 |---|---|---|---|
 | `hres/rain_{year}.zarr` | Rain-day forecast precipitation, rain domain | `init, lead, lat, lon` | mm/day |
-| `hres/dyn_{year}.zarr` | Rain-day-mean dynamics on the dynamics domain: u850, v850, u200 (optional), mslp, q at 1000–300 hPa, w500 | `init, lead, lat, lon[, level]` | SI |
+| `hres/dyn_{year}.zarr` | Rain-day-mean dynamics on the dynamics domain: `u850`, `v850`, `mslp`, `w500`, and the column integrals `pw` (mm), `ivtx`, `ivty` (kg m⁻¹ s⁻¹) computed at ingest from q, u, v at 300–1000 hPa, so pressure levels are never stored | `init, lead, lat, lon` | SI |
 | `imd/rain_{year}.nc` | IMD gridded rain | `time, lat, lon` | mm/day |
 | `chirps/rain_{year}.nc` | CHIRPS regridded (conservative) to 0.25° | `time, lat, lon` | mm/day |
 | `tracks/ibtracs_ni.parquet` | `sid, time, lat, lon, grade, wind_kt` | row per 3/6-hourly fix | — |

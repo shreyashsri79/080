@@ -25,8 +25,10 @@ grid:
   res_deg: 0.25
 
 sources:
-  hres_url: gs://weatherbench2/datasets/hres/2016-2022-0012-1440x721.zarr   # VERIFY (MODEL_SPEC section 3)
-  hres_precip_kind: tp6          # tp6 | cumulative
+  hres_url: gs://weatherbench2/datasets/hres/2016-2022-0012-1440x721.zarr   # confirmed Phase 0 (docs/PHASE0_FINDINGS.md)
+  hres_precip_kind: cumulative   # confirmed Phase 0 run 3: total_precipitation is accumulated from init (m)
+  hres_batch_inits: 4            # inits loaded per batch during ingest (memory vs speed)
+  rmm_file: null                 # local copy of BOM rmm.74toRealtime.txt (BOM blocks cloud IPs); env RMM_FILE overrides
   truth: imd                     # imd | chirps
   imd_date_offset_days: 0        # set by scripts/imd_offset_check (MODEL_SPEC 4.3)
   imd_climatology: [1981, 2015]

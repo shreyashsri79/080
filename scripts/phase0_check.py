@@ -133,7 +133,22 @@ def check_gfs():
     return True, {"init": init, "apcp_messages": windows}
 
 
-CHECKS = {"hres": check_hres, "imd": check_imd, "ibtracs": check_ibtracs, "mjo": check_mjo, "gfs": check_gfs}
+def check_hres_chunks():
+    """How the store is chunked -> how much data an India-only read really downloads."""
+    import xarray as xr
+    from regimerain.ingest.hres import chunk_report
+    ds = xr.open_zarr(HRES_URL, storage_options={"token": "anon"})
+    rep = chunk_report(ds, ("total_precipitation", "specific_humidity", "u_component_of_wind",
+                            "mean_sea_level_pressure"))
+    for v, r in rep.items():
+        c = r["chunks"] or {}
+        lat_c, lon_c = c.get("latitude"), c.get("longitude")
+        r["india_fraction_of_chunk"] = (round((129 / lat_c) * (135 / lon_c), 3)
+                                        if lat_c and lon_c and lat_c >= 129 and lon_c >= 135 else "spatially chunked")
+    return True, rep
+
+
+CHECKS = {"hres": check_hres, "hres_chunks": check_hres_chunks, "imd": check_imd, "ibtracs": check_ibtracs, "mjo": check_mjo, "gfs": check_gfs}
 
 
 def main(names: list[str]) -> int:
